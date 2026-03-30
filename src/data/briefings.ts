@@ -1,0 +1,245 @@
+import type { Briefing, Category, DailySummary, Issue, ResearchHighlight } from "@/types";
+
+// ─── Today's articles (2026-03-27) ──────────────────────────────────────────
+
+export const mockIssues: Issue[] = [
+  {
+    id: "1",
+    title: "OpenAI, 네이티브 멀티모달 추론 기능 탑재한 GPT-5 출시",
+    titleEn: "OpenAI Launches GPT-5 with Native Multimodal Reasoning",
+    category: "Model", importance: "High",
+    summary: "OpenAI가 멀티모달 추론, 장문 맥락 이해, 도구 활용 기능이 대폭 향상된 GPT-5를 공개했다.",
+    summaryEn: "OpenAI released GPT-5 with major advances in multimodal reasoning, long-context understanding, and tool use.",
+    whyItMatters: "GPT-5는 파운데이션 모델의 기준선을 끌어올려, 모든 AI 연구소와 언어 모델 기반 기업의 경쟁 구도에 직접적 영향을 미친다.",
+    whyItMattersEn: "GPT-5 raises the baseline for foundation models, directly affecting competitive positioning for every AI lab.",
+    practicalImpact: "복잡한 다단계 추론이 필요한 프로덕션 워크로드에 GPT-5 도입을 검토해야 한다.",
+    practicalImpactEn: "Teams should evaluate GPT-5 for production workloads requiring complex multi-step reasoning.",
+    keywords: ["GPT-5", "멀티모달", "추론", "OpenAI"], source: "The Verge", sourceUrl: "https://www.theverge.com/ai-artificial-intelligence", region: "US", date: "2026-03-27", type: "news",
+  },
+  {
+    id: "2",
+    title: "EU AI Act 시행 개시, 첫 규정 준수 감사 착수",
+    titleEn: "EU AI Act Enforcement Begins with First Compliance Audits",
+    category: "Policy", importance: "High",
+    summary: "유럽연합 집행위원회가 EU AI Act에 따른 첫 규정 준수 감사를 시작했으며, 금융 및 의료 분야의 고위험 AI 배포를 대상으로 한다.",
+    summaryEn: "The European Commission initiated its first compliance audits under the EU AI Act, targeting high-risk AI deployments.",
+    whyItMatters: "규제가 문서에서 실제 집행으로 전환되는 시점이다. 미준수 기업은 글로벌 매출의 최대 7%에 달하는 벌금에 직면한다.",
+    whyItMattersEn: "This marks the transition from regulation on paper to active enforcement.",
+    practicalImpact: "EU 사업을 영위하는 AI 팀은 학습 데이터, 모델 평가 결과, 편향 테스트 문서화를 우선시해야 한다.",
+    practicalImpactEn: "AI teams with EU exposure should prioritize documentation of training data and model evaluation results.",
+    keywords: ["EU AI Act", "규제", "컴플라이언스", "감사"], source: "Reuters", sourceUrl: "https://www.reuters.com/technology/artificial-intelligence/", region: "Europe", date: "2026-03-27", type: "news",
+  },
+  {
+    id: "3",
+    title: "Google DeepMind, 단백질-약물 상호작용 예측 분야 획기적 연구 발표",
+    titleEn: "DeepMind Publishes Breakthrough in Protein-Drug Interaction Prediction",
+    category: "Research", importance: "High",
+    summary: "DeepMind 연구진이 94% 정확도로 단백질-약물 상호작용을 예측하는 새로운 모델을 발표했다.",
+    summaryEn: "DeepMind researchers published a model predicting protein-drug interactions with 94% accuracy.",
+    whyItMatters: "신약 개발 일정을 수개월 단축하고 전임상 스크리닝 비용을 10분의 1로 줄일 수 있는 잠재력이 있다.",
+    whyItMattersEn: "Could accelerate drug discovery timelines by months and reduce pre-clinical screening costs.",
+    practicalImpact: "바이오텍 및 제약 AI 팀은 기존 신약 개발 파이프라인과의 통합을 검토해야 한다.",
+    practicalImpactEn: "Biotech and pharma AI teams should evaluate integration with existing drug discovery pipelines.",
+    keywords: ["DeepMind", "신약 개발", "AlphaFold", "바이오텍"], source: "Nature", sourceUrl: "https://www.nature.com/subjects/machine-learning", region: "Global", date: "2026-03-27", type: "research",
+  },
+  {
+    id: "4",
+    title: "Anthropic, 600억 달러 기업가치로 50억 달러 시리즈 D 투자 유치",
+    titleEn: "Anthropic Raises $5B Series D at $60B Valuation",
+    category: "Investment", importance: "High",
+    summary: "Anthropic이 50억 달러 규모의 시리즈 D 라운드를 마감하며 기업가치 600억 달러를 기록했다.",
+    summaryEn: "Anthropic closed a $5B Series D at a $60B valuation.",
+    whyItMatters: "프론티어 AI 연구소에 대한 투자자 신뢰가 지속되고 있음을 보여준다.",
+    whyItMattersEn: "Signals continued investor confidence in frontier AI labs.",
+    practicalImpact: "기업 고객은 Anthropic의 제품 개발 가속화를 기대할 수 있다.",
+    practicalImpactEn: "Enterprise customers can expect accelerated product development.",
+    keywords: ["Anthropic", "투자", "Claude", "기업가치"], source: "Bloomberg", sourceUrl: "https://www.bloomberg.com/technology", region: "US", date: "2026-03-27", type: "news",
+  },
+  {
+    id: "5",
+    title: "Meta, Mixture-of-Experts 아키텍처 기반 Llama 4 공개",
+    titleEn: "Meta Releases Llama 4 with Mixture-of-Experts Architecture",
+    category: "Model", importance: "High",
+    summary: "Meta가 총 1.2조 개 파라미터 중 추론 시 700억 개만 활성화하는 MoE 아키텍처 기반의 Llama 4를 출시했다.",
+    summaryEn: "Meta released Llama 4 featuring a mixture-of-experts architecture with 1.2T total parameters.",
+    whyItMatters: "오픈 가중치 모델이 프론티어 AI에 대한 접근을 민주화하고 폐쇄형 모델 비즈니스 모델에 도전한다.",
+    whyItMattersEn: "Open-weight models at this capability level democratize frontier AI access.",
+    practicalImpact: "엔지니어링 팀은 현재 프로덕션 모델 대비 Llama 4의 벤치마크를 수행해야 한다.",
+    practicalImpactEn: "Engineering teams should benchmark Llama 4 against current production models.",
+    keywords: ["Llama 4", "Meta", "오픈소스", "MoE"], source: "TechCrunch", sourceUrl: "https://techcrunch.com/category/artificial-intelligence/", region: "US", date: "2026-03-27", type: "news",
+  },
+  {
+    id: "6",
+    title: "NVIDIA, AI 학습용 Blackwell Ultra B300 GPU 발표",
+    titleEn: "NVIDIA Announces Blackwell Ultra B300 GPU for AI Training",
+    category: "Infrastructure", importance: "Medium",
+    summary: "NVIDIA가 B200 대비 2.5배 학습 처리량을 제공하는 Blackwell Ultra B300을 공개했다.",
+    summaryEn: "NVIDIA unveiled the Blackwell Ultra B300, delivering 2.5x training throughput over B200.",
+    whyItMatters: "프론티어 모델 학습 비용을 직접 낮추고, 모델 개발이 가능한 주체를 확대한다.",
+    whyItMattersEn: "Directly reduces frontier model training costs and expands who can afford to build them.",
+    practicalImpact: "인프라 팀은 조달 일정 계획에 착수해야 한다.",
+    practicalImpactEn: "Infrastructure teams should plan procurement cycles.",
+    keywords: ["NVIDIA", "B300", "GPU", "Blackwell"], source: "Ars Technica", sourceUrl: "https://arstechnica.com/ai/", region: "US", date: "2026-03-27", type: "news",
+  },
+  {
+    id: "7",
+    title: "Stanford HAI: AI 에이전트 벤치마크에서 심각한 안전성 취약점 발견",
+    titleEn: "Stanford HAI: AI Agent Benchmarks Reveal Critical Safety Gaps",
+    category: "Research", importance: "Medium",
+    summary: "스탠포드 HAI가 자율 AI 에이전트에 대한 종합 평가를 발표했다. 23%의 엣지 케이스에서 위험 행동을 나타냈다.",
+    summaryEn: "Stanford HAI published a comprehensive evaluation of autonomous AI agents with unsafe behaviors in 23% of edge cases.",
+    whyItMatters: "에이전트 AI가 프로덕션 배포로 전환됨에 따라, 실패 모드를 이해하는 것이 필수적이다.",
+    whyItMattersEn: "As agentic AI moves toward production, understanding failure modes is essential.",
+    practicalImpact: "AI 에이전트를 배포하는 팀은 강력한 샌드박싱과 사람-인-더-루프 체크포인트를 구현해야 한다.",
+    practicalImpactEn: "Teams deploying AI agents should implement robust sandboxing and human-in-the-loop checkpoints.",
+    keywords: ["에이전트", "안전성", "벤치마크", "Stanford"], source: "Stanford HAI", sourceUrl: "https://hai.stanford.edu/news", region: "US", date: "2026-03-27", type: "research",
+  },
+  {
+    id: "8",
+    title: "중국 Baidu, 실시간 웹 추론 기능 탑재한 ERNIE 5.0 공개",
+    titleEn: "Baidu Debuts ERNIE 5.0 with Real-Time Web Reasoning",
+    category: "Model", importance: "Medium",
+    summary: "Baidu가 실시간 웹 검색 및 추론 기능이 통합된 ERNIE 5.0을 출시했다.",
+    summaryEn: "Baidu launched ERNIE 5.0 with integrated real-time web search and reasoning.",
+    whyItMatters: "서방과 중국 AI 생태계 간 격차가 확대되고 있음을 보여준다.",
+    whyItMattersEn: "Represents growing divergence between Western and Chinese AI ecosystems.",
+    practicalImpact: "아시아 시장에서 사업하는 기업은 ERNIE 5.0을 검토해야 한다.",
+    practicalImpactEn: "Companies in Asian markets should evaluate ERNIE 5.0.",
+    keywords: ["Baidu", "ERNIE", "중국", "기업용"], source: "South China Morning Post", sourceUrl: "https://www.scmp.com/tech/big-tech", region: "Asia", date: "2026-03-27", type: "news",
+  },
+  {
+    id: "9",
+    title: "뉴로심볼릭 접근법으로 ARC-AGI 벤치마크 최고 성능 달성",
+    titleEn: "Neurosymbolic System Achieves State-of-the-Art on ARC-AGI Benchmark",
+    category: "Research", importance: "Medium",
+    summary: "MIT와 Google Brain 공동 연구팀이 뉴로심볼릭 시스템으로 ARC-AGI 벤치마크에서 89% 정확도를 달성했다.",
+    summaryEn: "A joint MIT and Google Brain team achieved 89% accuracy on the ARC-AGI benchmark using a neurosymbolic system.",
+    whyItMatters: "ARC-AGI는 AI의 유동 지능을 측정하는 핵심 테스트이다.",
+    whyItMattersEn: "ARC-AGI is a key test of fluid intelligence in AI.",
+    practicalImpact: "추론과 계획에 집중하는 연구팀은 뉴로심볼릭 접근법을 연구해야 한다.",
+    practicalImpactEn: "Research teams focused on reasoning should study the neurosymbolic approach.",
+    keywords: ["ARC-AGI", "뉴로심볼릭", "추론", "벤치마크"], source: "arXiv", sourceUrl: "https://arxiv.org/list/cs.AI/recent", region: "Global", date: "2026-03-27", type: "research",
+  },
+  {
+    id: "10",
+    title: "Microsoft, Windows 12에 AI Copilot 심층 통합 발표",
+    titleEn: "Microsoft Integrates AI Copilot Deeply into Windows 12",
+    category: "Product", importance: "Medium",
+    summary: "Microsoft가 Windows 12에 시스템 수준의 AI Copilot 통합을 적용한다고 발표했다.",
+    summaryEn: "Microsoft announced Windows 12 will feature system-level AI Copilot integration.",
+    whyItMatters: "OS 수준의 AI 통합은 새로운 플랫폼 역학을 만들어낸다.",
+    whyItMattersEn: "OS-level AI integration creates new platform dynamics.",
+    practicalImpact: "제품 팀은 OS 네이티브 AI 기능이 자사 가치 제안에 미치는 영향을 고려해야 한다.",
+    practicalImpactEn: "Product teams should assess how native OS AI capabilities affect their value proposition.",
+    keywords: ["Microsoft", "Windows 12", "Copilot", "플랫폼"], source: "The Verge", sourceUrl: "https://www.theverge.com/ai-artificial-intelligence", region: "US", date: "2026-03-27", type: "news",
+  },
+  {
+    id: "11",
+    title: "ICLR 2026 최우수 논문: 파괴적 망각 없는 효율적 지속 학습",
+    titleEn: "ICLR 2026 Best Paper: Efficient Continual Learning Without Catastrophic Forgetting",
+    category: "Research", importance: "Low",
+    summary: "ICLR 2026 최우수 논문이 동적 아키텍처 확장 방식의 지속 학습 기법을 소개했다.",
+    summaryEn: "The ICLR 2026 best paper presents a continual learning method with dynamic architecture expansion.",
+    whyItMatters: "파괴적 망각은 변화하는 환경에서 AI 배포의 근본적 과제이다.",
+    whyItMattersEn: "Catastrophic forgetting remains a fundamental challenge for deploying AI.",
+    practicalImpact: "빈번한 재학습이 필요한 ML 엔지니어는 이 접근법을 검토해야 한다.",
+    practicalImpactEn: "ML engineers requiring frequent retraining should evaluate this approach.",
+    keywords: ["ICLR", "지속 학습", "파괴적 망각"], source: "ICLR 2026", sourceUrl: "https://iclr.cc/", region: "Global", date: "2026-03-27", type: "research",
+  },
+  {
+    id: "12",
+    title: "일본, 100억 달러 규모 국가 AI 인프라 기금 발표",
+    titleEn: "Japan Announces $10B National AI Infrastructure Fund",
+    category: "Infrastructure", importance: "Medium",
+    summary: "일본 정부가 1.5조 엔 규모의 주권 AI 컴퓨팅 인프라 기금을 발표했다.",
+    summaryEn: "Japan unveiled a ¥1.5 trillion fund for sovereign AI compute infrastructure.",
+    whyItMatters: "국가 AI 인프라 투자는 글로벌 경쟁 구도를 재편한다.",
+    whyItMattersEn: "National AI infrastructure investments reshape global competition.",
+    practicalImpact: "일본에서 사업하는 기업은 보조금 지원 컴퓨팅 자원의 혜택을 받을 수 있다.",
+    practicalImpactEn: "Companies operating in Japan may benefit from subsidized compute access.",
+    keywords: ["일본", "인프라", "주권 AI", "컴퓨팅"], source: "Nikkei Asia", sourceUrl: "https://asia.nikkei.com/Business/Technology", region: "Asia", date: "2026-03-27", type: "news",
+  },
+];
+
+export const todaySummary: DailySummary = {
+  trend: "프론티어 모델들이 멀티모달 추론과 에이전트 기능으로 수렴하고 있으며, 유럽의 규제 집행과 아시아의 주권 컴퓨팅 투자가 글로벌 AI 지형을 재편하고 있다.",
+  trendEn: "Frontier models are converging on multimodal reasoning and agent capabilities, while European enforcement and Asian sovereign compute investment are reshaping the global AI landscape.",
+  topKeywords: ["GPT-5", "에이전트", "규제", "오픈소스", "인프라"],
+  topKeywordsEn: ["GPT-5", "agents", "regulation", "open source", "infrastructure"],
+  totalArticles: 12,
+  topCategory: "Model",
+  topMention: "OpenAI",
+};
+
+// ─── Archive: past daily briefings ──────────────────────────────────────────
+
+function buildBriefing(
+  date: string,
+  summaryTrend: string,
+  topKeywords: string[],
+  topCategory: Category,
+  topMention: string,
+  issues: Issue[],
+  topics: string[],
+): Briefing {
+  return {
+    id: `briefing-${date}`,
+    date,
+    dailySummary: {
+      trend: summaryTrend,
+      trendEn: summaryTrend,
+      topKeywords,
+      topKeywordsEn: topKeywords,
+      totalArticles: issues.length,
+      topCategory,
+      topMention,
+    },
+    issues: issues.filter((issue) => issue.type === "news"),
+    researchHighlights: issues.filter((issue): issue is ResearchHighlight => issue.type === "research"),
+    trendingTopics: topics,
+    trendingTopicsEn: topics,
+  };
+}
+
+export const todayBriefing: Briefing = buildBriefing(
+  "2026-03-27",
+  todaySummary.trend,
+  todaySummary.topKeywords,
+  todaySummary.topCategory,
+  todaySummary.topMention,
+  mockIssues,
+  ["에이전트", "멀티모달", "오픈소스", "규제", "추론", "반도체", "벤치마크", "안전성", "주권 AI", "MoE"],
+);
+
+export const archiveBriefings: Briefing[] = [
+  buildBriefing("2026-03-26", "Google이 Gemini 2.5를 발표하고, OpenAI는 에이전트 프레임워크 확장에 나섰다. 미국 상원에서 AI 안전 법안 청문회가 열렸다.", ["Gemini", "에이전트", "안전성", "미국 정책", "멀티모달"], "Model", "Google", [
+    { id: "a1", title: "Google, Gemini 2.5 Pro 발표 — 100만 토큰 컨텍스트 지원", titleEn: "Google Announces Gemini 2.5 Pro with 1M Token Context", category: "Model", importance: "High", summary: "Google이 100만 토큰 컨텍스트 윈도우와 향상된 코딩 능력을 갖춘 Gemini 2.5 Pro를 공개했다.", summaryEn: "Google unveiled Gemini 2.5 Pro with 1M token context window.", whyItMatters: "장문 맥락 처리 능력이 기업 AI 활용의 핵심 차별화 요소가 되고 있다.", whyItMattersEn: "Long-context capabilities are becoming a key differentiator.", practicalImpact: "대용량 문서 처리 워크플로에 즉시 적용 가능하다.", practicalImpactEn: "Immediately applicable to large document processing workflows.", keywords: ["Gemini", "Google", "컨텍스트", "코딩"], source: "Google Blog", sourceUrl: "https://blog.google/technology/ai/", region: "US", date: "2026-03-26", type: "news" },
+    { id: "a2", title: "미국 상원, AI 안전 및 투명성 법안 청문회 개최", titleEn: "US Senate Holds Hearing on AI Safety and Transparency Bill", category: "Policy", importance: "High", summary: "미국 상원이 AI 시스템의 투명성과 안전성 요건을 강화하는 법안에 대한 청문회를 개최했다.", summaryEn: "US Senate held hearing on strengthening AI system transparency and safety requirements.", whyItMatters: "미국의 AI 규제 방향이 구체화되고 있다.", whyItMattersEn: "US AI regulation direction is becoming concrete.", practicalImpact: "미국 시장 AI 기업은 규제 동향을 주시해야 한다.", practicalImpactEn: "AI companies in the US market should monitor regulatory trends.", keywords: ["미국", "규제", "안전성", "상원"], source: "Reuters", sourceUrl: "https://www.reuters.com/technology/artificial-intelligence/", region: "US", date: "2026-03-26", type: "news" },
+    { id: "a3", title: "멀티에이전트 협업 시스템의 효율적 조정에 관한 새로운 연구", titleEn: "New Research on Efficient Coordination in Multi-Agent Systems", category: "Research", importance: "Medium", summary: "CMU 연구팀이 멀티에이전트 시스템에서 통신 오버헤드를 60% 줄이는 새로운 프로토콜을 발표했다.", summaryEn: "CMU researchers published a new protocol reducing communication overhead by 60% in multi-agent systems.", whyItMatters: "에이전트 간 효율적 협업은 자율 시스템 확장의 핵심이다.", whyItMattersEn: "Efficient inter-agent collaboration is key to scaling autonomous systems.", practicalImpact: "멀티에이전트 아키텍처를 구축하는 팀은 이 프로토콜을 검토해야 한다.", practicalImpactEn: "Teams building multi-agent architectures should review this protocol.", keywords: ["멀티에이전트", "CMU", "프로토콜"], source: "arXiv", sourceUrl: "https://arxiv.org/list/cs.AI/recent", region: "US", date: "2026-03-26", type: "research" },
+  ], ["Gemini", "에이전트", "규제", "코딩", "멀티에이전트"]),
+
+  buildBriefing("2026-03-25", "AI 칩 공급망 재편이 가속화되고 있으며, 유럽 스타트업 투자가 사상 최고치를 기록했다. 합성 데이터 품질에 대한 우려가 커지고 있다.", ["칩", "투자", "합성 데이터", "유럽", "공급망"], "Infrastructure", "NVIDIA", [
+    { id: "b1", title: "AMD, AI 학습 전용 MI400 GPU 라인업 발표", titleEn: "AMD Announces MI400 GPU Lineup for AI Training", category: "Infrastructure", importance: "High", summary: "AMD가 NVIDIA B300에 대항하는 MI400 시리즈를 발표했다.", summaryEn: "AMD announced MI400 series competing with NVIDIA B300.", whyItMatters: "GPU 시장의 경쟁 심화는 AI 인프라 비용 감소로 이어진다.", whyItMattersEn: "Increased GPU market competition leads to lower AI infrastructure costs.", practicalImpact: "인프라 팀은 AMD 옵션도 벤치마크에 포함해야 한다.", practicalImpactEn: "Infrastructure teams should include AMD options in benchmarks.", keywords: ["AMD", "MI400", "GPU", "칩"], source: "AnandTech", sourceUrl: "https://www.anandtech.com/tag/gpus", region: "US", date: "2026-03-25", type: "news" },
+    { id: "b2", title: "유럽 AI 스타트업, Q1 투자액 120억 유로 — 사상 최고", titleEn: "European AI Startups Raise Record €12B in Q1", category: "Investment", importance: "Medium", summary: "유럽 AI 스타트업이 2026년 1분기에 총 120억 유로를 유치해 분기 기준 사상 최고치를 기록했다.", summaryEn: "European AI startups raised a record €12B in Q1 2026.", whyItMatters: "유럽 AI 생태계의 자금 확대는 글로벌 인재 경쟁을 심화시킨다.", whyItMattersEn: "Growing European AI funding intensifies global talent competition.", practicalImpact: "유럽 시장 진출을 고려하는 기업에 파트너십 기회가 늘어난다.", practicalImpactEn: "Increases partnership opportunities for companies entering European market.", keywords: ["유럽", "투자", "스타트업", "Q1"], source: "Financial Times", sourceUrl: "https://www.ft.com/technology", region: "Europe", date: "2026-03-25", type: "news" },
+    { id: "b3", title: "합성 데이터로 학습한 모델의 성능 저하에 대한 체계적 분석", titleEn: "Systematic Analysis of Performance Degradation in Synthetically Trained Models", category: "Research", importance: "Medium", summary: "Oxford 연구팀이 합성 데이터만으로 학습한 모델이 특정 도메인에서 최대 15% 성능 저하를 보인다고 발표했다.", summaryEn: "Oxford researchers found models trained solely on synthetic data show up to 15% degradation in specific domains.", whyItMatters: "합성 데이터의 한계를 이해하는 것이 데이터 전략 수립에 중요하다.", whyItMattersEn: "Understanding synthetic data limitations is crucial for data strategy.", practicalImpact: "합성 데이터를 활용하는 팀은 실제 데이터와 혼합 전략을 검토해야 한다.", practicalImpactEn: "Teams using synthetic data should review mixed data strategies.", keywords: ["합성 데이터", "Oxford", "성능", "학습"], source: "arXiv", sourceUrl: "https://arxiv.org/list/cs.AI/recent", region: "Europe", date: "2026-03-25", type: "research" },
+  ], ["AMD", "유럽", "투자", "합성 데이터", "GPU"]),
+
+  buildBriefing("2026-03-24", "AI 에이전트 플랫폼 경쟁이 본격화되고, 한국이 AI 반도체 국산화 전략을 발표했다. 대규모 언어 모델의 에너지 효율 연구가 주목받고 있다.", ["에이전트 플랫폼", "한국", "반도체", "에너지", "효율"], "Product", "에이전트", [
+    { id: "c1", title: "Salesforce, 엔터프라이즈 AI 에이전트 플랫폼 'Agentforce 2.0' 출시", titleEn: "Salesforce Launches Enterprise AI Agent Platform 'Agentforce 2.0'", category: "Product", importance: "High", summary: "Salesforce가 기업용 AI 에이전트 구축 및 배포 플랫폼 Agentforce 2.0을 출시했다.", summaryEn: "Salesforce launched Agentforce 2.0, an enterprise AI agent platform.", whyItMatters: "엔터프라이즈 AI 에이전트 시장이 플랫폼 경쟁 단계에 진입했다.", whyItMattersEn: "Enterprise AI agent market enters platform competition phase.", practicalImpact: "Salesforce 생태계 기업은 에이전트 통합을 계획해야 한다.", practicalImpactEn: "Salesforce ecosystem companies should plan agent integration.", keywords: ["Salesforce", "에이전트", "엔터프라이즈", "플랫폼"], source: "TechCrunch", sourceUrl: "https://techcrunch.com/category/artificial-intelligence/", region: "US", date: "2026-03-24", type: "news" },
+    { id: "c2", title: "한국 정부, AI 반도체 국산화 5개년 전략 발표", titleEn: "South Korea Announces 5-Year AI Chip Localization Strategy", category: "Infrastructure", importance: "Medium", summary: "한국 정부가 AI 반도체 설계부터 제조까지 국산화를 목표로 하는 5개년 전략을 발표했다.", summaryEn: "South Korean government announced a 5-year strategy for localizing AI chip design and manufacturing.", whyItMatters: "반도체 공급망 다변화가 국가 전략 차원에서 추진되고 있다.", whyItMattersEn: "Semiconductor supply chain diversification is being pursued at national strategy level.", practicalImpact: "한국 반도체 관련 기업에 정부 지원 기회가 확대된다.", practicalImpactEn: "Government support opportunities expand for Korean semiconductor companies.", keywords: ["한국", "반도체", "국산화", "전략"], source: "조선일보", sourceUrl: "https://www.chosun.com/economy/tech_it/", region: "Asia", date: "2026-03-24", type: "news" },
+    { id: "c3", title: "LLM 추론 에너지 소비를 70% 줄이는 새로운 양자화 기법", titleEn: "New Quantization Technique Reduces LLM Inference Energy by 70%", category: "Research", importance: "Medium", summary: "ETH Zurich 연구팀이 LLM 추론 시 에너지 소비를 70% 줄이는 새로운 양자화 기법을 발표했다.", summaryEn: "ETH Zurich researchers published a quantization technique reducing LLM inference energy by 70%.", whyItMatters: "AI의 환경적 영향이 중요한 이슈로 부상하고 있다.", whyItMattersEn: "Environmental impact of AI is becoming an important issue.", practicalImpact: "온디바이스 AI 배포에 큰 영향을 미칠 수 있다.", practicalImpactEn: "Could significantly impact on-device AI deployment.", keywords: ["양자화", "에너지", "LLM", "효율"], source: "arXiv", sourceUrl: "https://arxiv.org/list/cs.AI/recent", region: "Europe", date: "2026-03-24", type: "research" },
+  ], ["Salesforce", "에이전트", "한국", "반도체", "양자화"]),
+
+  buildBriefing("2026-03-23", "중국 AI 기업들의 글로벌 확장이 가속화되고, AI 윤리 논쟁이 다시 뜨거워지고 있다. 코드 생성 모델 분야에서 새로운 벤치마크가 등장했다.", ["중국", "글로벌화", "윤리", "코드 생성", "벤치마크"], "Model", "중국 AI", [
+    { id: "d1", title: "ByteDance, 글로벌 엔터프라이즈 AI 서비스 'Doubao Enterprise' 출시", titleEn: "ByteDance Launches Global Enterprise AI Service 'Doubao Enterprise'", category: "Product", importance: "High", summary: "ByteDance가 글로벌 시장을 대상으로 엔터프라이즈 AI 서비스를 출시했다.", summaryEn: "ByteDance launched enterprise AI service for global markets.", whyItMatters: "중국 AI 기업의 글로벌 진출이 서방 기업과의 직접 경쟁을 야기한다.", whyItMattersEn: "Chinese AI companies going global creates direct competition with Western firms.", practicalImpact: "아시아 시장 기업은 Doubao를 대안으로 검토할 수 있다.", practicalImpactEn: "Asian market companies can evaluate Doubao as an alternative.", keywords: ["ByteDance", "Doubao", "글로벌", "엔터프라이즈"], source: "Bloomberg", sourceUrl: "https://www.bloomberg.com/technology", region: "Asia", date: "2026-03-23", type: "news" },
+    { id: "d2", title: "AI 생성 콘텐츠 표시 의무화 — 주요국 합의 도출", titleEn: "Major Nations Agree on Mandatory AI Content Labeling", category: "Policy", importance: "Medium", summary: "G7 국가들이 AI 생성 콘텐츠에 대한 의무 표시제를 합의했다.", summaryEn: "G7 nations agreed on mandatory labeling for AI-generated content.", whyItMatters: "AI 콘텐츠 투명성에 대한 글로벌 규범이 형성되고 있다.", whyItMattersEn: "Global norms for AI content transparency are forming.", practicalImpact: "AI 콘텐츠 생성 도구를 제공하는 기업은 표시 기능을 준비해야 한다.", practicalImpactEn: "Companies providing AI content tools must prepare labeling features.", keywords: ["G7", "콘텐츠", "표시", "투명성"], source: "Financial Times", sourceUrl: "https://www.ft.com/technology", region: "Global", date: "2026-03-23", type: "news" },
+  ], ["ByteDance", "중국", "G7", "콘텐츠 표시", "윤리"]),
+
+  buildBriefing("2026-03-22", "Apple이 iOS 20에 대규모 AI 업데이트를 예고하고, 의료 AI 분야에서 FDA 승인 사례가 급증하고 있다.", ["Apple", "iOS", "의료 AI", "FDA", "온디바이스"], "Product", "Apple", [
+    { id: "e1", title: "Apple, WWDC 2026 앞서 iOS 20 AI 기능 대폭 확대 예고", titleEn: "Apple Previews Major AI Expansion for iOS 20 Ahead of WWDC 2026", category: "Product", importance: "High", summary: "Apple이 iOS 20에서 온디바이스 AI 기능을 대폭 확대할 것임을 예고했다.", summaryEn: "Apple previewed major on-device AI expansion for iOS 20.", whyItMatters: "Apple의 AI 전략은 수십억 사용자에게 직접 영향을 미친다.", whyItMattersEn: "Apple's AI strategy directly affects billions of users.", practicalImpact: "iOS 앱 개발자는 새 AI API에 대한 준비를 시작해야 한다.", practicalImpactEn: "iOS developers should start preparing for new AI APIs.", keywords: ["Apple", "iOS 20", "온디바이스", "WWDC"], source: "9to5Mac", sourceUrl: "https://9to5mac.com/guides/ai/", region: "US", date: "2026-03-22", type: "news" },
+    { id: "e2", title: "FDA, AI 기반 진단 도구 10건 추가 승인 — 분기 최다", titleEn: "FDA Approves 10 More AI Diagnostic Tools — Quarterly Record", category: "Product", importance: "Medium", summary: "FDA가 이번 분기에 AI 기반 진단 도구 10건을 추가 승인하며 분기 최다 기록을 세웠다.", summaryEn: "FDA approved 10 additional AI diagnostic tools this quarter, setting a new quarterly record.", whyItMatters: "의료 AI의 규제 수용이 빠르게 확대되고 있다.", whyItMattersEn: "Regulatory acceptance of medical AI is expanding rapidly.", practicalImpact: "헬스케어 AI 스타트업에 시장 진입 기회가 확대된다.", practicalImpactEn: "Market entry opportunities expand for healthcare AI startups.", keywords: ["FDA", "의료 AI", "진단", "승인"], source: "STAT News", sourceUrl: "https://www.statnews.com/topic/artificial-intelligence/", region: "US", date: "2026-03-22", type: "news" },
+  ], ["Apple", "FDA", "iOS", "의료 AI", "온디바이스"]),
+];
+
+// Combine today + archive for full archive list
+export const allBriefings: Briefing[] = [todayBriefing, ...archiveBriefings];

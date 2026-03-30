@@ -1,0 +1,15 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "node",
+    "OPENAI_API_KEY": "your-openai-api-key",
+    "OPENAI_BASE_URL": "https://your-resource.openai.azure.com/openai/v1",
+    "OPENAI_MODEL": "gpt-5.4",
+    "ADMIN_API_KEY": "your-local-admin-api-key",
+    "REQUIRE_ADMIN_API_AUTH": "false",
+    "DAILY_BRIEFING_SCHEDULE": "0 0 6 * * *",
+    "ENABLE_SCHEDULED_BRIEFING": "false",
+    "BRIEFING_STORAGE_FILE": ".data/briefings.json"
+  }
+}

@@ -1,0 +1,140 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 220 16% 96%;
+    --foreground: 224 40% 10%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 224 40% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 224 40% 10%;
+
+    --primary: 224 55% 18%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 220 14% 92%;
+    --secondary-foreground: 224 40% 10%;
+
+    --muted: 220 14% 94%;
+    --muted-foreground: 220 10% 44%;
+
+    --accent: 205 85% 45%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 220 13% 89%;
+    --input: 220 13% 89%;
+    --ring: 224 55% 18%;
+    --radius: 0.75rem;
+
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+
+    /* Semantic category colors */
+    --cat-model: 260 50% 52%;
+    --cat-research: 205 85% 45%;
+    --cat-policy: 38 90% 50%;
+    --cat-product: 152 60% 40%;
+    --cat-investment: 330 60% 50%;
+    --cat-infra: 220 15% 50%;
+
+    /* Importance colors */
+    --imp-high: 0 72% 51%;
+    --imp-medium: 38 90% 50%;
+    --imp-low: 152 60% 40%;
+
+    /* Signal stripe for high importance */
+    --imp-high-stripe: 0 72% 51%;
+
+    /* Gradients */
+    --gradient-hero: linear-gradient(135deg, hsl(224 55% 14%), hsl(220 50% 22%));
+    --gradient-accent: linear-gradient(135deg, hsl(205 85% 45%), hsl(224 55% 35%));
+
+    /* Shadows */
+    --shadow-sm: 0 1px 2px 0 hsl(220 20% 20% / 0.04);
+    --shadow-card: 0 1px 3px 0 hsl(220 20% 20% / 0.06), 0 1px 2px -1px hsl(220 20% 20% / 0.04);
+    --shadow-card-hover: 0 10px 32px -6px hsl(220 20% 20% / 0.12), 0 4px 8px -2px hsl(220 20% 20% / 0.06);
+    --shadow-high: 0 0 0 1px hsl(0 72% 51% / 0.12), 0 2px 8px -2px hsl(0 72% 51% / 0.1);
+    --shadow-modal: 0 24px 64px -16px hsl(220 20% 20% / 0.28), 0 8px 20px -8px hsl(220 20% 20% / 0.12);
+
+    --font-display: 'Playfair Display', serif;
+    --font-body: 'Inter', sans-serif;
+  }
+
+  .dark {
+    --background: 224 40% 6%;
+    --foreground: 210 40% 96%;
+    --card: 224 36% 10%;
+    --card-foreground: 210 40% 96%;
+    --popover: 224 36% 10%;
+    --popover-foreground: 210 40% 96%;
+    --primary: 210 40% 96%;
+    --primary-foreground: 224 40% 10%;
+    --secondary: 217 33% 17%;
+    --secondary-foreground: 210 40% 96%;
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 205 85% 50%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217 28% 16%;
+    --input: 217 28% 16%;
+    --ring: 212 27% 84%;
+
+    --gradient-hero: linear-gradient(135deg, hsl(224 50% 10%), hsl(220 45% 16%));
+    --shadow-card: 0 1px 3px 0 hsl(220 40% 4% / 0.3), 0 1px 2px -1px hsl(220 40% 4% / 0.2);
+    --shadow-card-hover: 0 10px 32px -6px hsl(220 40% 4% / 0.4), 0 4px 8px -2px hsl(220 40% 4% / 0.2);
+    --shadow-high: 0 0 0 1px hsl(0 63% 31% / 0.2), 0 2px 8px -2px hsl(0 63% 31% / 0.15);
+    --shadow-modal: 0 24px 64px -16px hsl(220 40% 4% / 0.6);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-body);
+  }
+  h1, h2, h3 {
+    font-family: var(--font-display);
+    letter-spacing: -0.01em;
+  }
+}
+
+@layer utilities {
+  .shadow-card {
+    box-shadow: var(--shadow-card);
+  }
+  .shadow-card-hover {
+    box-shadow: var(--shadow-card-hover);
+  }
+  .shadow-high {
+    box-shadow: var(--shadow-high);
+  }
+  .shadow-modal {
+    box-shadow: var(--shadow-modal);
+  }
+  .gradient-hero {
+    background: var(--gradient-hero);
+  }
+  .gradient-accent {
+    background: var(--gradient-accent);
+  }
+}

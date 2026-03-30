@@ -1,0 +1,10 @@
+{
+  "configurations": {
+    "app": {
+      "appLocation": ".",
+      "apiLocation": "api",
+      "outputLocation": "dist",
+      "appDevserverUrl": "http://127.0.0.1:8080"
+    }
+  }
+}

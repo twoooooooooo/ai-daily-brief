@@ -1,0 +1,5 @@
+local.settings.json
+local.settings.*.json
+.data
+dist
+node_modules

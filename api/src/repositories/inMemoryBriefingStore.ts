@@ -1,0 +1,173 @@
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { getBriefingStorageSettings } from "../config/runtimeConfig.js";
+import type {
+  BriefingRecord,
+  BriefingStore,
+  IssueRecord,
+  ResearchHighlightRecord,
+  StoredBriefingBundle,
+} from "./briefingStore.js";
+
+interface PersistedBriefingStoreFile {
+  briefings: BriefingRecord[];
+  issues: IssueRecord[];
+  researchHighlights: ResearchHighlightRecord[];
+}
+
+const briefingRecords = new Map<string, BriefingRecord>();
+const briefingIdsByDate = new Map<string, string>();
+const issueRecordsByBriefingId = new Map<string, IssueRecord[]>();
+const researchHighlightRecordsByBriefingId = new Map<string, ResearchHighlightRecord[]>();
+
+const DEFAULT_STORAGE_FILE = path.join(process.cwd(), ".data", "briefings.json");
+const storageFilePath = getBriefingStorageSettings().filePath || DEFAULT_STORAGE_FILE;
+let loadPromise: Promise<void> | null = null;
+
+function cloneBriefingRecord(record: BriefingRecord): BriefingRecord {
+  return {
+    ...record,
+    dailySummary: {
+      ...record.dailySummary,
+      topKeywords: [...record.dailySummary.topKeywords],
+    },
+    trendingTopics: [...record.trendingTopics],
+  };
+}
+
+function cloneIssueRecords<T extends IssueRecord | ResearchHighlightRecord>(records: T[]): T[] {
+  return records.map((record) => ({
+    ...record,
+    keywords: [...record.keywords],
+  }));
+}
+
+function cloneBundle(bundle: StoredBriefingBundle): StoredBriefingBundle {
+  return {
+    briefing: cloneBriefingRecord(bundle.briefing),
+    issues: cloneIssueRecords(bundle.issues),
+    researchHighlights: cloneIssueRecords(bundle.researchHighlights),
+  };
+}
+
+function buildBundleFromId(id: string): StoredBriefingBundle | null {
+  const briefing = briefingRecords.get(id);
+  if (!briefing) {
+    return null;
+  }
+
+  return cloneBundle({
+    briefing,
+    issues: issueRecordsByBriefingId.get(id) ?? [],
+    researchHighlights: researchHighlightRecordsByBriefingId.get(id) ?? [],
+  });
+}
+
+function resetStore(): void {
+  briefingRecords.clear();
+  briefingIdsByDate.clear();
+  issueRecordsByBriefingId.clear();
+  researchHighlightRecordsByBriefingId.clear();
+}
+
+function toPersistedStoreFile(): PersistedBriefingStoreFile {
+  return {
+    briefings: [...briefingRecords.values()].map(cloneBriefingRecord),
+    issues: [...issueRecordsByBriefingId.values()].flatMap((records) => cloneIssueRecords(records)),
+    researchHighlights: [...researchHighlightRecordsByBriefingId.values()].flatMap((records) => cloneIssueRecords(records)),
+  };
+}
+
+function hydrateStore(data: PersistedBriefingStoreFile): void {
+  resetStore();
+
+  for (const briefing of data.briefings) {
+    briefingRecords.set(briefing.id, cloneBriefingRecord(briefing));
+    briefingIdsByDate.set(briefing.date, briefing.id);
+  }
+
+  for (const issue of data.issues) {
+    const existingIssues = issueRecordsByBriefingId.get(issue.briefingId) ?? [];
+    existingIssues.push({ ...issue, keywords: [...issue.keywords] });
+    issueRecordsByBriefingId.set(issue.briefingId, existingIssues);
+  }
+
+  for (const researchHighlight of data.researchHighlights) {
+    const existingHighlights = researchHighlightRecordsByBriefingId.get(researchHighlight.briefingId) ?? [];
+    existingHighlights.push({ ...researchHighlight, keywords: [...researchHighlight.keywords] });
+    researchHighlightRecordsByBriefingId.set(researchHighlight.briefingId, existingHighlights);
+  }
+}
+
+async function ensureLoaded(): Promise<void> {
+  if (!loadPromise) {
+    loadPromise = (async () => {
+      try {
+        const raw = await readFile(storageFilePath, "utf-8");
+        const parsed = JSON.parse(raw) as PersistedBriefingStoreFile;
+        hydrateStore(parsed);
+      } catch (error) {
+        const isMissingFile = error instanceof Error && "code" in error && error.code === "ENOENT";
+        if (isMissingFile) {
+          resetStore();
+          return;
+        }
+
+        throw error;
+      }
+    })();
+  }
+
+  await loadPromise;
+}
+
+async function persistStore(): Promise<void> {
+  const directoryPath = path.dirname(storageFilePath);
+  await mkdir(directoryPath, { recursive: true });
+  await writeFile(storageFilePath, `${JSON.stringify(toPersistedStoreFile(), null, 2)}\n`, "utf-8");
+}
+
+export class InMemoryBriefingStore implements BriefingStore {
+  async saveBriefing(bundle: StoredBriefingBundle): Promise<void> {
+    await ensureLoaded();
+    briefingRecords.set(bundle.briefing.id, cloneBriefingRecord(bundle.briefing));
+    briefingIdsByDate.set(bundle.briefing.date, bundle.briefing.id);
+    issueRecordsByBriefingId.set(bundle.briefing.id, cloneIssueRecords(bundle.issues));
+    researchHighlightRecordsByBriefingId.set(
+      bundle.briefing.id,
+      cloneIssueRecords(bundle.researchHighlights),
+    );
+    await persistStore();
+  }
+
+  async getBriefingById(id: string): Promise<StoredBriefingBundle | null> {
+    await ensureLoaded();
+    return buildBundleFromId(id);
+  }
+
+  async getBriefingByDate(date: string): Promise<StoredBriefingBundle | null> {
+    await ensureLoaded();
+    const briefingId = briefingIdsByDate.get(date);
+    return briefingId ? buildBundleFromId(briefingId) : null;
+  }
+
+  async getTodayBriefing(today: string): Promise<StoredBriefingBundle | null> {
+    return this.getBriefingByDate(today);
+  }
+
+  async listRecentBriefings(limit?: number): Promise<StoredBriefingBundle[]> {
+    await ensureLoaded();
+    const sortedRecords = [...briefingRecords.values()]
+      .sort((left, right) => right.date.localeCompare(left.date));
+
+    const limitedRecords = typeof limit === "number"
+      ? sortedRecords.slice(0, limit)
+      : sortedRecords;
+
+    return limitedRecords
+      .map((record) => buildBundleFromId(record.id))
+      .filter((bundle): bundle is StoredBriefingBundle => bundle !== null);
+  }
+}
+
+export const inMemoryBriefingStore = new InMemoryBriefingStore();
