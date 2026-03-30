@@ -116,34 +116,34 @@ export async function searchBriefingsHandler(
 app.http("getTodayBriefing", {
   methods: ["GET"],
   authLevel: "anonymous",
-  route: "briefings/today",
+  route: "api/briefings/today",
   handler: getTodayBriefingHandler,
 });
 
 app.http("listBriefings", {
   methods: ["GET"],
   authLevel: "anonymous",
-  route: "briefings",
+  route: "api/briefings",
   handler: listBriefingsHandler,
 });
 
 app.http("getBriefingById", {
   methods: ["GET"],
   authLevel: "anonymous",
-  route: "briefings/{id:regex(^(?!today$).+)}",
+  route: "api/briefings/{id:regex(^(?!today$).+)}",
   handler: getBriefingByIdHandler,
 });
 
 app.http("getBriefingByDate", {
   methods: ["GET"],
   authLevel: "anonymous",
-  route: "briefings/date/{date}",
+  route: "api/briefings/date/{date}",
   handler: getBriefingByDateHandler,
 });
 
 app.http("searchBriefings", {
   methods: ["GET"],
   authLevel: "anonymous",
-  route: "search",
+  route: "api/search",
   handler: searchBriefingsHandler,
 });

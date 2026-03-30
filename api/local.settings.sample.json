@@ -10,6 +10,10 @@
     "REQUIRE_ADMIN_API_AUTH": "false",
     "DAILY_BRIEFING_SCHEDULE": "0 0 6 * * *",
     "ENABLE_SCHEDULED_BRIEFING": "false",
-    "BRIEFING_STORAGE_FILE": ".data/briefings.json"
+    "BRIEFING_STORAGE_PROVIDER": "file",
+    "BRIEFING_STORAGE_FILE": ".data/briefings.json",
+    "BRIEFING_STORAGE_CONTAINER": "briefings",
+    "BRIEFING_STORAGE_BLOB_NAME": "briefings.json",
+    "BRIEFING_STORAGE_FALLBACK_TO_MEMORY": "true"
   }
 }

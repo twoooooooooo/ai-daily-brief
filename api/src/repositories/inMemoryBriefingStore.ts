@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { getBriefingStorageSettings } from "../config/runtimeConfig.js";
+import { createLogger } from "../utils/logger.js";
 import type {
   BriefingRecord,
   BriefingStore,
@@ -19,10 +20,14 @@ const briefingRecords = new Map<string, BriefingRecord>();
 const briefingIdsByDate = new Map<string, string>();
 const issueRecordsByBriefingId = new Map<string, IssueRecord[]>();
 const researchHighlightRecordsByBriefingId = new Map<string, ResearchHighlightRecord[]>();
+const logger = createLogger("briefing-store");
 
+const storageSettings = getBriefingStorageSettings();
 const DEFAULT_STORAGE_FILE = path.join(process.cwd(), ".data", "briefings.json");
-const storageFilePath = getBriefingStorageSettings().filePath || DEFAULT_STORAGE_FILE;
+const storageFilePath = storageSettings.filePath || DEFAULT_STORAGE_FILE;
+const allowMemoryFallback = storageSettings.fallbackToMemory;
 let loadPromise: Promise<void> | null = null;
+let persistenceUnavailableReason: string | null = null;
 
 function cloneBriefingRecord(record: BriefingRecord): BriefingRecord {
   return {
@@ -30,8 +35,10 @@ function cloneBriefingRecord(record: BriefingRecord): BriefingRecord {
     dailySummary: {
       ...record.dailySummary,
       topKeywords: [...record.dailySummary.topKeywords],
+      topKeywordsEn: [...record.dailySummary.topKeywordsEn],
     },
     trendingTopics: [...record.trendingTopics],
+    trendingTopicsEn: [...record.trendingTopicsEn],
   };
 }
 
@@ -113,6 +120,16 @@ async function ensureLoaded(): Promise<void> {
           return;
         }
 
+        if (allowMemoryFallback) {
+          persistenceUnavailableReason = error instanceof Error ? error.message : String(error);
+          logger.warn("Persistent briefing storage could not be loaded; using in-memory fallback.", {
+            storageFilePath,
+            reason: persistenceUnavailableReason,
+          });
+          resetStore();
+          return;
+        }
+
         throw error;
       }
     })();
@@ -123,8 +140,21 @@ async function ensureLoaded(): Promise<void> {
 
 async function persistStore(): Promise<void> {
   const directoryPath = path.dirname(storageFilePath);
-  await mkdir(directoryPath, { recursive: true });
-  await writeFile(storageFilePath, `${JSON.stringify(toPersistedStoreFile(), null, 2)}\n`, "utf-8");
+  try {
+    await mkdir(directoryPath, { recursive: true });
+    await writeFile(storageFilePath, `${JSON.stringify(toPersistedStoreFile(), null, 2)}\n`, "utf-8");
+    persistenceUnavailableReason = null;
+  } catch (error) {
+    if (!allowMemoryFallback) {
+      throw error;
+    }
+
+    persistenceUnavailableReason = error instanceof Error ? error.message : String(error);
+    logger.warn("Persistent briefing storage could not be written; keeping in-memory fallback active.", {
+      storageFilePath,
+      reason: persistenceUnavailableReason,
+    });
+  }
 }
 
 export class InMemoryBriefingStore implements BriefingStore {
@@ -171,3 +201,15 @@ export class InMemoryBriefingStore implements BriefingStore {
 }
 
 export const inMemoryBriefingStore = new InMemoryBriefingStore();
+
+export function getBriefingStorageStatus(): {
+  storageFilePath: string;
+  usingMemoryFallback: boolean;
+  persistenceUnavailableReason: string | null;
+} {
+  return {
+    storageFilePath,
+    usingMemoryFallback: persistenceUnavailableReason !== null,
+    persistenceUnavailableReason,
+  };
+}

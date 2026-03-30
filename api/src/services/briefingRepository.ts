@@ -1,4 +1,4 @@
-import { inMemoryBriefingStore } from "../repositories/inMemoryBriefingStore.js";
+import { briefingStore, getBriefingStoreStatus } from "../repositories/briefingStoreProvider.js";
 import { createLogger, type LogContext } from "../utils/logger.js";
 import type {
   BriefingRecord,
@@ -215,14 +215,15 @@ export async function saveBriefingWithOptions(
     date: briefing.date,
     briefingId: briefing.id,
     overwrite: options.overwrite === true,
+    storage: getBriefingStoreStatus(),
   });
-  await inMemoryBriefingStore.saveBriefing(toStoredBundle(briefing));
+  await briefingStore.saveBriefing(toStoredBundle(briefing));
   return cloneBriefing(briefing);
 }
 
 export async function getTodayBriefing(): Promise<BriefingResponse | null> {
   const today = new Date().toISOString().slice(0, 10);
-  const stored = await inMemoryBriefingStore.getTodayBriefing(today);
+  const stored = await briefingStore.getTodayBriefing(today);
 
   if (stored) {
     return toBriefingResponse(fromStoredBundle(stored));
@@ -237,12 +238,12 @@ export async function listBriefings(): Promise<Briefing[]> {
 }
 
 export async function listRecentBriefings(limit = 30): Promise<Briefing[]> {
-  const bundles = await inMemoryBriefingStore.listRecentBriefings(limit);
+  const bundles = await briefingStore.listRecentBriefings(limit);
   return bundles.map(fromStoredBundle);
 }
 
 export async function searchBriefings(filters: SearchBriefingsFilters = {}): Promise<Briefing[]> {
-  const bundles = await inMemoryBriefingStore.listRecentBriefings(filters.limit);
+  const bundles = await briefingStore.listRecentBriefings(filters.limit);
   const briefings = bundles.map(fromStoredBundle);
 
   return briefings.filter((briefing) => {
@@ -264,12 +265,12 @@ export async function searchBriefings(filters: SearchBriefingsFilters = {}): Pro
 
 export async function getBriefingById(id: string): Promise<Briefing | null> {
   const normalizedId = normalizeBriefingId(id);
-  const stored = await inMemoryBriefingStore.getBriefingById(normalizedId);
+  const stored = await briefingStore.getBriefingById(normalizedId);
   return stored ? fromStoredBundle(stored) : null;
 }
 
 export async function getBriefingByDate(date: string): Promise<Briefing | null> {
   const normalizedDate = normalizeDate(date);
-  const stored = await inMemoryBriefingStore.getBriefingByDate(normalizedDate);
+  const stored = await briefingStore.getBriefingByDate(normalizedDate);
   return stored ? fromStoredBundle(stored) : null;
 }

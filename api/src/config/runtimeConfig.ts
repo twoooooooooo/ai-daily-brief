@@ -5,7 +5,12 @@ export interface OpenAISettings {
 }
 
 export interface BriefingStorageSettings {
+  provider: "auto" | "file" | "blob";
   filePath?: string;
+  blobContainerName: string;
+  blobName: string;
+  connectionString?: string;
+  fallbackToMemory: boolean;
 }
 
 export interface ScheduleSettings {
@@ -49,8 +54,21 @@ export function getOpenAISettings(): OpenAISettings {
 }
 
 export function getBriefingStorageSettings(): BriefingStorageSettings {
+  const configuredFilePath = readEnv("BRIEFING_STORAGE_FILE");
+  const homeDirectory = readEnv("HOME");
+  const environment = getEnvironmentSettings();
+  const provider = readEnv("BRIEFING_STORAGE_PROVIDER");
+
   return {
-    filePath: readEnv("BRIEFING_STORAGE_FILE"),
+    provider: provider === "file" || provider === "blob" ? provider : "auto",
+    filePath: configuredFilePath
+      ?? (environment.isProduction && homeDirectory
+        ? `${homeDirectory}/data/briefings.json`
+        : undefined),
+    blobContainerName: readEnv("BRIEFING_STORAGE_CONTAINER") ?? "briefings",
+    blobName: readEnv("BRIEFING_STORAGE_BLOB_NAME") ?? "briefings.json",
+    connectionString: readEnv("BRIEFING_STORAGE_CONNECTION_STRING") ?? readEnv("AzureWebJobsStorage"),
+    fallbackToMemory: readEnv("BRIEFING_STORAGE_FALLBACK_TO_MEMORY") !== "false",
   };
 }
 
