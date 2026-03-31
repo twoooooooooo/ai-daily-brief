@@ -205,9 +205,11 @@ export async function runDailyBriefingHandler(
     const date = typeof payload.date === "string" ? payload.date : undefined;
     const overwrite = parseOptionalBoolean(payload.overwrite);
     const compact = parseOptionalBoolean(payload.compact);
+    const skipIngestion = parseOptionalBoolean(payload.skipIngestion);
     const briefing = await runDailyBriefingPipeline({
       date,
       overwrite,
+      skipIngestion,
       logContext,
     });
     if (compact) {

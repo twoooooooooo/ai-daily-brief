@@ -23,6 +23,8 @@ export const endpoints = {
   briefingById: (id: string) => `${API_BASE_URL}/briefings/${encodeURIComponent(id.trim())}`,
   /** GET  /api/search             — full-text search across briefings */
   search: `${API_BASE_URL}/search`,
+  /** POST /api/ops/ingest-rss */
+  ingestRss: `${API_BASE_URL}/ops/ingest-rss`,
   /** GET|POST /api/ops/run-daily-briefing */
   runDailyBriefing: `${API_BASE_URL}/ops/run-daily-briefing`,
 } as const;

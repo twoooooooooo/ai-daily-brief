@@ -8,6 +8,7 @@ import { ingestConfiguredRssFeeds } from "./rssIngestionService.js";
 interface RunDailyBriefingPipelineInput {
   date?: string;
   overwrite?: boolean;
+  skipIngestion?: boolean;
   logContext?: LogContext;
 }
 
@@ -35,12 +36,25 @@ export async function runDailyBriefingPipeline(
   scopedLogger.info("Starting daily briefing pipeline.", {
     date: targetDate,
     overwrite: input.overwrite === true,
+    skipIngestion: input.skipIngestion === true,
   });
 
   const cachedArticles = listStoredRssArticles();
   let articles = cachedArticles;
 
-  if (cachedArticles.length > 0) {
+  if (input.skipIngestion) {
+    if (cachedArticles.length === 0) {
+      scopedLogger.error("Daily briefing pipeline was asked to skip ingestion, but no cached RSS articles were available.", {
+        date: targetDate,
+      });
+      throw new DailyBriefingPipelineError("No cached RSS articles are available for generation.");
+    }
+
+    scopedLogger.info("Skipping RSS ingestion and using cached RSS articles for daily briefing pipeline.", {
+      date: targetDate,
+      cachedArticleCount: cachedArticles.length,
+    });
+  } else if (cachedArticles.length > 0) {
     scopedLogger.info("Using cached RSS articles for daily briefing pipeline.", {
       date: targetDate,
       cachedArticleCount: cachedArticles.length,

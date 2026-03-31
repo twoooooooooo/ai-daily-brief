@@ -354,8 +354,18 @@ export async function fetchBriefingById(id: string): Promise<Briefing | null> {
 
 export async function runDailyBriefingGeneration(date?: string, adminApiKey?: string): Promise<Briefing> {
   const effectiveAdminApiKey = adminApiKey?.trim() || configuredAdminApiKey;
+  const adminHeaders = effectiveAdminApiKey ? { "x-admin-key": effectiveAdminApiKey } : {};
+
+  await postJson<{ articlesDiscovered: number; uniqueArticles: number }>(
+    endpoints.ingestRss,
+    effectiveAdminApiKey ? { adminApiKey: effectiveAdminApiKey } : {},
+    "RSS 수집에 실패했습니다.",
+    adminHeaders,
+  );
+
   const requestBody: Record<string, string | boolean> = {
     compact: true,
+    skipIngestion: true,
   };
 
   if (date) {
@@ -370,7 +380,7 @@ export async function runDailyBriefingGeneration(date?: string, adminApiKey?: st
     endpoints.runDailyBriefing,
     requestBody,
     "일일 브리핑 생성에 실패했습니다.",
-    effectiveAdminApiKey ? { "x-admin-key": effectiveAdminApiKey } : {},
+    adminHeaders,
   );
 
   if (typeof result.briefingId === "string" && result.briefingId.trim()) {
