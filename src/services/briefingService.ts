@@ -172,19 +172,25 @@ async function postJson<T>(url: string, body: unknown, fallbackMessage: string, 
   }
 
   if (!response.ok) {
-    try {
-      const errorBody = await response.json() as { message?: string };
-      const apiMessage = errorBody.message?.trim();
-      throw new BriefingServiceError(
-        apiMessage ? `${fallbackMessage}: ${apiMessage} (${response.status})` : `${fallbackMessage} (${response.status})`,
-      );
-    } catch (error) {
-      if (error instanceof BriefingServiceError) {
-        throw error;
-      }
+    const responseText = await response.text();
 
-      throw createStatusError(response.status, fallbackMessage);
+    if (responseText.trim()) {
+      try {
+        const errorBody = JSON.parse(responseText) as { message?: string };
+        const apiMessage = errorBody.message?.trim();
+        throw new BriefingServiceError(
+          apiMessage ? `${fallbackMessage}: ${apiMessage} (${response.status})` : `${fallbackMessage} (${response.status})`,
+        );
+      } catch (error) {
+        if (error instanceof BriefingServiceError) {
+          throw error;
+        }
+
+        throw new BriefingServiceError(`${fallbackMessage}: ${responseText.trim()} (${response.status})`);
+      }
     }
+
+    throw createStatusError(response.status, fallbackMessage);
   }
 
   return parseJsonResponse<T>(response, fallbackMessage);
