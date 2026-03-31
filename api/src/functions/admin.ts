@@ -109,6 +109,14 @@ function parseOptionalBoolean(value: unknown): boolean {
   return value === true;
 }
 
+function parseOptionalNumber(value: unknown): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return undefined;
+  }
+
+  return value;
+}
+
 export async function ingestRssHandler(
   request: HttpRequest,
   context: InvocationContext,
@@ -233,6 +241,53 @@ export async function probeOpenAIHandler(
   });
 }
 
+export async function diagnosePipelineHandler(
+  request: HttpRequest,
+  context: InvocationContext,
+): Promise<HttpResponseInit> {
+  return handleAdminRequest(context, "diagnosePipeline", async (logContext) => {
+    let payload: unknown = {};
+
+    try {
+      const rawBody = await request.text();
+      payload = rawBody.trim() ? JSON.parse(rawBody) : {};
+    } catch {
+      return badRequestResponse("Request body must be valid JSON.");
+    }
+
+    if (!isRecord(payload)) {
+      return badRequestResponse("Request body must be a JSON object.");
+    }
+
+    if (!isAuthorizedAdminRequest(request, payload)) {
+      logger.child(logContext).warn("Rejected unauthorized admin request.");
+      return unauthorizedResponse("Unauthorized admin operation.");
+    }
+
+    const maxArticles = parseOptionalNumber(payload.maxArticles) ?? 5;
+    const rssResult = await ingestConfiguredRssFeeds(logContext);
+    const sampleArticles = rssResult.articles.slice(0, Math.max(1, Math.min(maxArticles, rssResult.articles.length)));
+    const generatedBriefing = await generateDailyBriefing({
+      articles: sampleArticles,
+      date: typeof payload.date === "string" ? payload.date : undefined,
+      logContext,
+    });
+
+    return jsonResponse({
+      rss: {
+        articleCount: rssResult.articles.length,
+        feedCount: rssResult.feedsProcessed,
+      },
+      generation: {
+        sampleArticleCount: sampleArticles.length,
+        issueCount: generatedBriefing.issues.length,
+        researchHighlightCount: generatedBriefing.researchHighlights.length,
+        trendingTopicCount: generatedBriefing.trendingTopics.length,
+      },
+    });
+  });
+}
+
 app.http("ingestRss", {
   methods: ["POST"],
   authLevel: "anonymous",
@@ -259,4 +314,11 @@ app.http("probeOpenAI", {
   authLevel: "anonymous",
   route: "ops/probe-openai",
   handler: probeOpenAIHandler,
+});
+
+app.http("diagnosePipeline", {
+  methods: ["GET", "POST"],
+  authLevel: "anonymous",
+  route: "ops/diagnose-pipeline",
+  handler: diagnosePipelineHandler,
 });
