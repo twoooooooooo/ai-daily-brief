@@ -15,6 +15,7 @@ Required local values:
 - `OPENAI_API_KEY`
 - `OPENAI_BASE_URL`
 - `OPENAI_MODEL`
+- `OPENAI_USE_AZURE_API_KEY_AUTH` when using Azure OpenAI key auth
 
 Operational values:
 
@@ -33,13 +34,17 @@ Set these as Function App Application Settings in Azure:
 - `OPENAI_API_KEY`
 - `OPENAI_BASE_URL`
 - `OPENAI_MODEL`
+- `OPENAI_USE_AZURE_API_KEY_AUTH`
 - `DAILY_BRIEFING_SCHEDULE`
 - `ENABLE_SCHEDULED_BRIEFING`
 
 Optional:
 
+- `OPENAI_API_VERSION`
 - `BRIEFING_STORAGE_FILE`
 - Any future database connection string such as `DATABASE_CONNECTION_STRING`
+
+If `OPENAI_BASE_URL` ends with `/openai/v1`, the backend treats it as the Azure/OpenAI v1 endpoint and does not append `api-version` to the request URL, even if `OPENAI_API_VERSION` is set.
 
 ## Azure Key Vault
 

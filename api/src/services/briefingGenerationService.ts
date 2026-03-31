@@ -148,8 +148,9 @@ function shouldUseAzureApiKeyAuth(): boolean {
 function buildOpenAIRequestUrl(): string {
   const baseUrl = getOpenAIBaseUrl().replace(/\/+$/, "");
   const apiVersion = getOpenAIApiVersion();
+  const usesAzureV1Endpoint = /\/openai\/v1$/i.test(baseUrl);
 
-  if (!apiVersion) {
+  if (!apiVersion || usesAzureV1Endpoint) {
     return `${baseUrl}/chat/completions`;
   }
 
