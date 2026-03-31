@@ -25,6 +25,10 @@ export interface AdminApiSettings {
   requireAuth: boolean;
 }
 
+export interface AdminProbeSettings {
+  enabled: boolean;
+}
+
 export interface EnvironmentSettings {
   isProduction: boolean;
 }
@@ -89,6 +93,13 @@ export function getAdminApiSettings(): AdminApiSettings {
   return {
     apiKey: readEnv("ADMIN_API_KEY"),
     requireAuth: environment.isProduction || readEnv("REQUIRE_ADMIN_API_AUTH") === "true",
+  };
+}
+
+export function getAdminProbeSettings(): AdminProbeSettings {
+  const environment = getEnvironmentSettings();
+  return {
+    enabled: !environment.isProduction || readEnv("ENABLE_ADMIN_PROBES") === "true",
   };
 }
 

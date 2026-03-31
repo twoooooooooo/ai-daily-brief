@@ -20,7 +20,7 @@ interface GenerateBriefingInput {
   logContext?: LogContext;
 }
 
-const MAX_GENERATION_ARTICLES = 20;
+const MAX_GENERATION_ARTICLES = 12;
 
 interface OpenAIChatCompletionResponse {
   choices?: Array<{
@@ -172,10 +172,110 @@ function buildOpenAIHeaders(): Record<string, string> {
   };
 }
 
+function getSourcePriority(article: NormalizedArticle): number {
+  const source = article.source.toLowerCase();
+
+  if (source.includes("techcrunch")) return 3.5;
+  if (source.includes("openai")) return 3.4;
+  if (source.includes("google")) return 3.2;
+  if (source.includes("arxiv")) return 2.2;
+  return 2;
+}
+
+function getCategoryPriority(article: NormalizedArticle): number {
+  switch (article.category) {
+    case "Policy":
+      return 3.3;
+    case "Investment":
+      return 3.1;
+    case "Infrastructure":
+      return 3;
+    case "Product":
+      return 2.8;
+    case "Model":
+      return 2.7;
+    case "Research":
+      return 2.4;
+    default:
+      return 2;
+  }
+}
+
+function getRecencyPriority(article: NormalizedArticle): number {
+  const ageHours = Math.max(0, (Date.now() - new Date(article.publishedAt).getTime()) / 36e5);
+  if (ageHours <= 24) return 3;
+  if (ageHours <= 72) return 2;
+  if (ageHours <= 168) return 1;
+  return 0;
+}
+
+function getSignalPriority(article: NormalizedArticle): number {
+  const text = `${article.title} ${article.summary}`.toLowerCase();
+  const signals = [
+    "launch", "released", "release", "funding", "raises", "acquire", "acquisition", "partnership",
+    "policy", "regulation", "senate", "court", "ipo", "investment", "shutdown", "expands",
+    "available", "rollout", "global", "enterprise", "subscription",
+  ];
+
+  return signals.reduce((score, signal) => score + (text.includes(signal) ? 0.35 : 0), 0);
+}
+
+function scoreArticle(article: NormalizedArticle): number {
+  return getSourcePriority(article)
+    + getCategoryPriority(article)
+    + getRecencyPriority(article)
+    + getSignalPriority(article);
+}
+
 function selectArticlesForGeneration(articles: NormalizedArticle[]): NormalizedArticle[] {
-  return [...articles]
-    .sort((left, right) => right.publishedAt.localeCompare(left.publishedAt))
-    .slice(0, MAX_GENERATION_ARTICLES);
+  const rankedArticles = [...articles]
+    .sort((left, right) => scoreArticle(right) - scoreArticle(left));
+
+  const selected: NormalizedArticle[] = [];
+  const sourceCounts = new Map<string, number>();
+  const categoryCounts = new Map<string, number>();
+  const typeCounts = new Map<string, number>();
+
+  for (const article of rankedArticles) {
+    if (selected.length >= MAX_GENERATION_ARTICLES) {
+      break;
+    }
+
+    const sourceCount = sourceCounts.get(article.source) ?? 0;
+    const categoryCount = categoryCounts.get(article.category) ?? 0;
+    const typeCount = typeCounts.get(article.type) ?? 0;
+
+    if (sourceCount >= 3) {
+      continue;
+    }
+
+    if (categoryCount >= 4) {
+      continue;
+    }
+
+    if (article.type === "research" && typeCount >= 4) {
+      continue;
+    }
+
+    selected.push(article);
+    sourceCounts.set(article.source, sourceCount + 1);
+    categoryCounts.set(article.category, categoryCount + 1);
+    typeCounts.set(article.type, typeCount + 1);
+  }
+
+  if (selected.length < Math.min(MAX_GENERATION_ARTICLES, rankedArticles.length)) {
+    for (const article of rankedArticles) {
+      if (selected.length >= MAX_GENERATION_ARTICLES) {
+        break;
+      }
+
+      if (!selected.some((selectedArticle) => selectedArticle.id === article.id)) {
+        selected.push(article);
+      }
+    }
+  }
+
+  return selected.sort((left, right) => right.publishedAt.localeCompare(left.publishedAt));
 }
 
 function buildOpenAIRequestBody(articles: NormalizedArticle[], date: string) {

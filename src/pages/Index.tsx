@@ -25,16 +25,10 @@ const Index = () => {
   } = useFilteredArticles();
 
   const [selectedArticle, setSelectedArticle] = useState<Issue | null>(null);
-  const showDevBriefingPanel = useMemo(() => {
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      if (params.get("admin") === "1") {
-        return true;
-      }
-    }
-
-    return import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEV_PANEL !== "false";
-  }, []);
+  const showDevBriefingPanel = useMemo(
+    () => import.meta.env.DEV || import.meta.env.VITE_ENABLE_DEV_PANEL === "true",
+    [],
+  );
 
   if (isLoading || (!isError && !summary)) {
     return (

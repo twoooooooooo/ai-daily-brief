@@ -26,6 +26,16 @@ interface SaveBriefingOptions {
 
 const logger = createLogger("briefing-repository");
 
+function isProbeBriefing(briefing: Briefing): boolean {
+  if (briefing.id.startsWith("probe-")) {
+    return true;
+  }
+
+  return [...briefing.issues, ...briefing.researchHighlights].some((article) =>
+    article.source === "System Probe" || article.id.startsWith("probe-"),
+  );
+}
+
 function cloneIssues<T extends Issue>(issues: T[]): T[] {
   return issues.map((issue) => ({
     ...issue,
@@ -226,7 +236,10 @@ export async function getTodayBriefing(): Promise<BriefingResponse | null> {
   const stored = await briefingStore.getTodayBriefing(today);
 
   if (stored) {
-    return toBriefingResponse(fromStoredBundle(stored));
+    const todayBriefing = fromStoredBundle(stored);
+    if (!isProbeBriefing(todayBriefing)) {
+      return toBriefingResponse(todayBriefing);
+    }
   }
 
   const mostRecent = await listRecentBriefings(1);
@@ -239,7 +252,9 @@ export async function listBriefings(): Promise<Briefing[]> {
 
 export async function listRecentBriefings(limit = 30): Promise<Briefing[]> {
   const bundles = await briefingStore.listRecentBriefings(limit);
-  return bundles.map(fromStoredBundle);
+  return bundles
+    .map(fromStoredBundle)
+    .filter((briefing) => !isProbeBriefing(briefing));
 }
 
 export async function searchBriefings(filters: SearchBriefingsFilters = {}): Promise<Briefing[]> {
@@ -266,11 +281,21 @@ export async function searchBriefings(filters: SearchBriefingsFilters = {}): Pro
 export async function getBriefingById(id: string): Promise<Briefing | null> {
   const normalizedId = normalizeBriefingId(id);
   const stored = await briefingStore.getBriefingById(normalizedId);
-  return stored ? fromStoredBundle(stored) : null;
+  if (!stored) {
+    return null;
+  }
+
+  const briefing = fromStoredBundle(stored);
+  return isProbeBriefing(briefing) ? null : briefing;
 }
 
 export async function getBriefingByDate(date: string): Promise<Briefing | null> {
   const normalizedDate = normalizeDate(date);
   const stored = await briefingStore.getBriefingByDate(normalizedDate);
-  return stored ? fromStoredBundle(stored) : null;
+  if (!stored) {
+    return null;
+  }
+
+  const briefing = fromStoredBundle(stored);
+  return isProbeBriefing(briefing) ? null : briefing;
 }

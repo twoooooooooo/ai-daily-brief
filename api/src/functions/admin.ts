@@ -1,6 +1,6 @@
 import { app, type HttpRequest, type HttpResponseInit, type InvocationContext } from "@azure/functions";
-import { badRequestResponse, internalErrorResponse, jsonResponse, unauthorizedResponse } from "../http/responses.js";
-import { getAdminApiSettings } from "../config/runtimeConfig.js";
+import { badRequestResponse, internalErrorResponse, jsonResponse, notFoundResponse, unauthorizedResponse } from "../http/responses.js";
+import { getAdminApiSettings, getAdminProbeSettings } from "../config/runtimeConfig.js";
 import { BriefingGenerationError, generateDailyBriefing, probeOpenAIConnection } from "../services/briefingGenerationService.js";
 import { getDailyBriefingJob, startDailyBriefingJob } from "../services/dailyBriefingJobService.js";
 import { DailyBriefingPipelineError, runDailyBriefingPipeline } from "../services/dailyBriefingPipeline.js";
@@ -55,6 +55,10 @@ function isAuthorizedAdminRequest(request: HttpRequest, payload?: unknown): bool
 
   const providedApiKey = getProvidedAdminApiKey(request, payload);
   return providedApiKey === configuredApiKey;
+}
+
+function areAdminProbesEnabled(): boolean {
+  return getAdminProbeSettings().enabled;
 }
 
 async function handleAdminRequest(
@@ -247,6 +251,10 @@ export async function probeOpenAIHandler(
   context: InvocationContext,
 ): Promise<HttpResponseInit> {
   return handleAdminRequest(context, "probeOpenAI", async (logContext) => {
+    if (!areAdminProbesEnabled()) {
+      return notFoundResponse("Admin probe endpoint not available.");
+    }
+
     let payload: unknown = {};
 
     try {
@@ -275,6 +283,10 @@ export async function diagnosePipelineHandler(
   context: InvocationContext,
 ): Promise<HttpResponseInit> {
   return handleAdminRequest(context, "diagnosePipeline", async (logContext) => {
+    if (!areAdminProbesEnabled()) {
+      return notFoundResponse("Admin probe endpoint not available.");
+    }
+
     let payload: unknown = {};
 
     try {
@@ -322,6 +334,10 @@ export async function probeRssHandler(
   context: InvocationContext,
 ): Promise<HttpResponseInit> {
   return handleAdminRequest(context, "probeRss", async (logContext) => {
+    if (!areAdminProbesEnabled()) {
+      return notFoundResponse("Admin probe endpoint not available.");
+    }
+
     const adminKey = request.query.get("adminKey");
     const payload = adminKey ? { adminApiKey: adminKey } : {};
 
@@ -351,6 +367,10 @@ export async function probeGenerationHandler(
   context: InvocationContext,
 ): Promise<HttpResponseInit> {
   return handleAdminRequest(context, "probeGeneration", async (logContext) => {
+    if (!areAdminProbesEnabled()) {
+      return notFoundResponse("Admin probe endpoint not available.");
+    }
+
     const adminKey = request.query.get("adminKey");
     const payload = adminKey ? { adminApiKey: adminKey } : {};
 
@@ -393,6 +413,10 @@ export async function probePersistenceHandler(
   context: InvocationContext,
 ): Promise<HttpResponseInit> {
   return handleAdminRequest(context, "probePersistence", async (logContext) => {
+    if (!areAdminProbesEnabled()) {
+      return notFoundResponse("Admin probe endpoint not available.");
+    }
+
     const adminKey = request.query.get("adminKey");
     const payload = adminKey ? { adminApiKey: adminKey } : {};
 
