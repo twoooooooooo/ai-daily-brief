@@ -1,4 +1,4 @@
-import type { ArticleFilters, ArticleType, ArchiveFilters, Briefing, BriefingResponse, Category, DailyBriefingJob, DailySummary, Importance, Issue, Region } from "@/types";
+import type { ArticleFilters, ArticleType, ArchiveFilters, Briefing, BriefingEdition, BriefingResponse, Category, DailyBriefingJob, DailySummary, Importance, Issue, Region } from "@/types";
 import { endpoints } from "@/config/api";
 
 // ─── Configuration ──────────────────────────────────────────────────────────
@@ -225,6 +225,12 @@ function buildArchiveSearchParams(filters: ArchiveFilters): URLSearchParams {
     params.set("dateTo", filters.dateTo.trim());
   }
 
+  const editionMap: Record<string, BriefingEdition | undefined> = {
+    "전체": undefined,
+    "오전": "Morning",
+    "오후": "Afternoon",
+  };
+
   const categoryMap: Record<string, Category | undefined> = {
     "전체": undefined,
     "정책": "Policy",
@@ -256,6 +262,7 @@ function buildArchiveSearchParams(filters: ArchiveFilters): URLSearchParams {
   const region = regionMap[filters.region];
   const importance = importanceMap[filters.importance];
   const type = typeMap[filters.category];
+  const edition = editionMap[filters.edition];
 
   if (category) {
     params.set("category", category);
@@ -271,6 +278,10 @@ function buildArchiveSearchParams(filters: ArchiveFilters): URLSearchParams {
 
   if (type) {
     params.set("type", type);
+  }
+
+  if (edition) {
+    params.set("edition", edition);
   }
 
   return params;

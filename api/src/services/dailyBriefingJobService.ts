@@ -1,4 +1,4 @@
-import type { Briefing } from "../shared/contracts.js";
+import type { Briefing, BriefingEdition } from "../shared/contracts.js";
 import { createCorrelationId, createLogger, type LogContext } from "../utils/logger.js";
 import { runDailyBriefingPipeline } from "./dailyBriefingPipeline.js";
 
@@ -10,6 +10,7 @@ export interface DailyBriefingJobRecord {
   createdAt: string;
   updatedAt: string;
   date?: string;
+  edition?: BriefingEdition;
   overwrite: boolean;
   briefingId?: string;
   error?: string;
@@ -17,6 +18,7 @@ export interface DailyBriefingJobRecord {
 
 interface StartDailyBriefingJobInput {
   date?: string;
+  edition?: BriefingEdition;
   overwrite?: boolean;
   logContext?: LogContext;
 }
@@ -60,6 +62,7 @@ export function startDailyBriefingJob(input: StartDailyBriefingJobInput = {}): D
     createdAt,
     updatedAt: createdAt,
     date: input.date,
+    edition: input.edition,
     overwrite: input.overwrite === true,
   };
 
@@ -76,12 +79,14 @@ export function startDailyBriefingJob(input: StartDailyBriefingJobInput = {}): D
     updateJob(jobId, { status: "running" });
     logger.child(jobLogContext).info("Started background daily briefing job.", {
       date: input.date,
+      edition: input.edition,
       overwrite: input.overwrite === true,
     });
 
     try {
       const briefing: Briefing = await runDailyBriefingPipeline({
         date: input.date,
+        edition: input.edition,
         overwrite: input.overwrite,
         logContext: jobLogContext,
       });
@@ -94,6 +99,7 @@ export function startDailyBriefingJob(input: StartDailyBriefingJobInput = {}): D
       logger.child(jobLogContext).info("Completed background daily briefing job.", {
         briefingId: briefing.id,
         date: briefing.date,
+        edition: briefing.edition,
       });
     } catch (error) {
       const message = toErrorMessage(error);

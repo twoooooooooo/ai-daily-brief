@@ -1,5 +1,6 @@
-import type { Briefing } from "../shared/contracts.js";
+import type { Briefing, BriefingEdition } from "../shared/contracts.js";
 import { createCorrelationId, createLogger, type LogContext } from "../utils/logger.js";
+import { resolveBriefingDate, resolveBriefingEdition } from "../utils/briefingEdition.js";
 import { saveBriefingWithOptions } from "./briefingRepository.js";
 import { generateDailyBriefing } from "./briefingGenerationService.js";
 import { listStoredRssArticles } from "./rssArticleStore.js";
@@ -7,6 +8,7 @@ import { ingestConfiguredRssFeeds } from "./rssIngestionService.js";
 
 interface RunDailyBriefingPipelineInput {
   date?: string;
+  edition?: BriefingEdition;
   overwrite?: boolean;
   skipIngestion?: boolean;
   logContext?: LogContext;
@@ -24,7 +26,8 @@ const logger = createLogger("daily-briefing-pipeline");
 export async function runDailyBriefingPipeline(
   input: RunDailyBriefingPipelineInput = {},
 ): Promise<Briefing> {
-  const targetDate = input.date ?? new Date().toISOString().slice(0, 10);
+  const targetDate = input.date ?? resolveBriefingDate();
+  const targetEdition = input.edition ?? resolveBriefingEdition();
   const correlationId = input.logContext?.correlationId ?? createCorrelationId("briefing");
   const scopedLogger = logger.child({
     component: "pipeline",
@@ -35,6 +38,7 @@ export async function runDailyBriefingPipeline(
 
   scopedLogger.info("Starting daily briefing pipeline.", {
     date: targetDate,
+    edition: targetEdition,
     overwrite: input.overwrite === true,
     skipIngestion: input.skipIngestion === true,
   });
@@ -84,6 +88,7 @@ export async function runDailyBriefingPipeline(
     briefing = await generateDailyBriefing({
       articles,
       date: input.date,
+      edition: targetEdition,
       logContext: {
         ...input.logContext,
         component: "briefing-generation",
@@ -111,6 +116,7 @@ export async function runDailyBriefingPipeline(
     });
     scopedLogger.info("Completed daily briefing pipeline.", {
       date: savedBriefing.date,
+      edition: savedBriefing.edition,
       briefingId: savedBriefing.id,
       articleCount: savedBriefing.issues.length + savedBriefing.researchHighlights.length,
     });

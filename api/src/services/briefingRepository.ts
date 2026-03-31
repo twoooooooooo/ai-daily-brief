@@ -1,15 +1,17 @@
 import { briefingStore, getBriefingStoreStatus } from "../repositories/briefingStoreProvider.js";
 import { createLogger, type LogContext } from "../utils/logger.js";
+import { buildBriefingId, compareBriefingsByRecency, resolveBriefingDate } from "../utils/briefingEdition.js";
 import type {
   BriefingRecord,
   IssueRecord,
   ResearchHighlightRecord,
   StoredBriefingBundle,
 } from "../repositories/briefingStore.js";
-import type { ArticleType, Briefing, BriefingResponse, Category, Importance, Issue, Region } from "../shared/contracts.js";
+import type { ArticleType, Briefing, BriefingEdition, BriefingResponse, Category, Importance, Issue, Region } from "../shared/contracts.js";
 
 export interface SearchBriefingsFilters {
   query?: string;
+  edition?: BriefingEdition;
   category?: Category;
   importance?: Importance;
   region?: Region;
@@ -62,6 +64,7 @@ function cloneBriefing(briefing: Briefing): Briefing {
 function toBriefingResponse(briefing: Briefing): BriefingResponse {
   return {
     articles: [...cloneIssues(briefing.issues), ...cloneIssues(briefing.researchHighlights)],
+    edition: briefing.edition,
     summary: {
       ...briefing.dailySummary,
       topKeywords: [...briefing.dailySummary.topKeywords],
@@ -147,6 +150,7 @@ function toStoredBundle(briefing: Briefing): StoredBriefingBundle {
   const briefingRecord: BriefingRecord = {
     id: briefing.id,
     date: briefing.date,
+    edition: briefing.edition,
     dailySummary: {
       ...briefing.dailySummary,
       trendEn: briefing.dailySummary.trendEn,
@@ -182,6 +186,7 @@ function fromStoredBundle(bundle: StoredBriefingBundle): Briefing {
   return {
     id: bundle.briefing.id,
     date: bundle.briefing.date,
+    edition: bundle.briefing.edition,
     lastUpdatedAt: bundle.briefing.updatedAt,
     dailySummary: {
       ...bundle.briefing.dailySummary,
@@ -210,11 +215,12 @@ export async function saveBriefingWithOptions(
   briefing: Briefing,
   options: SaveBriefingOptions = {},
 ): Promise<Briefing> {
-  const existingBriefing = await getBriefingByDate(briefing.date);
+  const existingBriefing = await getBriefingById(buildBriefingId(briefing.date, briefing.edition));
 
   if (existingBriefing && !options.overwrite) {
     logger.child(options.logContext ?? {}).warn("Skipped duplicate briefing save for date.", {
       date: briefing.date,
+      edition: briefing.edition,
       existingBriefingId: existingBriefing.id,
       attemptedBriefingId: briefing.id,
     });
@@ -232,7 +238,7 @@ export async function saveBriefingWithOptions(
 }
 
 export async function getTodayBriefing(): Promise<BriefingResponse | null> {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = resolveBriefingDate();
   const stored = await briefingStore.getTodayBriefing(today);
 
   if (stored) {
@@ -254,15 +260,23 @@ export async function listRecentBriefings(limit = 30): Promise<Briefing[]> {
   const bundles = await briefingStore.listRecentBriefings(limit);
   return bundles
     .map(fromStoredBundle)
-    .filter((briefing) => !isProbeBriefing(briefing));
+    .filter((briefing) => !isProbeBriefing(briefing))
+    .sort(compareBriefingsByRecency);
 }
 
 export async function searchBriefings(filters: SearchBriefingsFilters = {}): Promise<Briefing[]> {
   const bundles = await briefingStore.listRecentBriefings(filters.limit);
-  const briefings = bundles.map(fromStoredBundle);
+  const briefings = bundles
+    .map(fromStoredBundle)
+    .filter((briefing) => !isProbeBriefing(briefing))
+    .sort(compareBriefingsByRecency);
 
   return briefings.filter((briefing) => {
     if (!matchesDateRange(briefing, filters)) {
+      return false;
+    }
+
+    if (filters.edition && briefing.edition !== filters.edition) {
       return false;
     }
 

@@ -1,4 +1,6 @@
 import { BlobServiceClient } from "@azure/storage-blob";
+import type { BriefingEdition } from "../shared/contracts.js";
+import { getEditionRank } from "../utils/briefingEdition.js";
 import type {
   BriefingRecord,
   BriefingStore,
@@ -156,7 +158,22 @@ export class BlobBriefingStore implements BriefingStore {
 
   async getBriefingByDate(date: string): Promise<StoredBriefingBundle | null> {
     const data = await this.loadStoreFile();
-    const briefing = data.briefings.find((item) => item.date === date);
+    const briefing = [...data.briefings]
+      .filter((item) => item.date === date)
+      .sort((left, right) => {
+        const editionComparison = getEditionRank(right.edition) - getEditionRank(left.edition);
+        if (editionComparison !== 0) {
+          return editionComparison;
+        }
+
+        return right.updatedAt.localeCompare(left.updatedAt);
+      })[0];
+    return briefing ? buildBundle(data, briefing.id) : null;
+  }
+
+  async getBriefingByDateAndEdition(date: string, edition: BriefingEdition): Promise<StoredBriefingBundle | null> {
+    const data = await this.loadStoreFile();
+    const briefing = data.briefings.find((item) => item.date === date && item.edition === edition);
     return briefing ? buildBundle(data, briefing.id) : null;
   }
 
@@ -166,7 +183,19 @@ export class BlobBriefingStore implements BriefingStore {
 
   async listRecentBriefings(limit?: number): Promise<StoredBriefingBundle[]> {
     const data = await this.loadStoreFile();
-    const sortedBriefings = [...data.briefings].sort((left, right) => right.date.localeCompare(left.date));
+    const sortedBriefings = [...data.briefings].sort((left, right) => {
+      const dateComparison = right.date.localeCompare(left.date);
+      if (dateComparison !== 0) {
+        return dateComparison;
+      }
+
+      const editionComparison = getEditionRank(right.edition) - getEditionRank(left.edition);
+      if (editionComparison !== 0) {
+        return editionComparison;
+      }
+
+      return right.updatedAt.localeCompare(left.updatedAt);
+    });
     const briefings = typeof limit === "number" ? sortedBriefings.slice(0, limit) : sortedBriefings;
 
     return briefings

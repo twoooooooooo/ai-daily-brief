@@ -1,8 +1,9 @@
-import type { Briefing, Issue, ResearchHighlight } from "../shared/contracts.js";
+import type { Briefing, BriefingEdition, Issue, ResearchHighlight } from "../shared/contracts.js";
 
 export interface BriefingRecord {
   id: string;
   date: string;
+  edition: BriefingEdition;
   dailySummary: Briefing["dailySummary"];
   trendingTopics: string[];
   trendingTopicsEn: string[];
@@ -28,6 +29,7 @@ export interface BriefingStore {
   saveBriefing(bundle: StoredBriefingBundle): Promise<void>;
   getBriefingById(id: string): Promise<StoredBriefingBundle | null>;
   getBriefingByDate(date: string): Promise<StoredBriefingBundle | null>;
+  getBriefingByDateAndEdition(date: string, edition: BriefingEdition): Promise<StoredBriefingBundle | null>;
   getTodayBriefing(today: string): Promise<StoredBriefingBundle | null>;
   listRecentBriefings(limit?: number): Promise<StoredBriefingBundle[]>;
 }

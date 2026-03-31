@@ -39,7 +39,7 @@ export function useFilteredArticles() {
 
 export function useArchive() {
   const [filters, setFilters] = useState<ArchiveFilters>({
-    search: "", category: "전체", region: "글로벌", importance: "전체", dateFrom: "", dateTo: "",
+    search: "", category: "전체", region: "글로벌", importance: "전체", edition: "전체", dateFrom: "", dateTo: "",
   });
 
   const { data, isLoading, isError, error, isFetching, refetch } = useQuery({
@@ -55,6 +55,7 @@ export function useArchive() {
     setCategory: (category: string) => setFilters((f) => ({ ...f, category })),
     setRegion: (region: string) => setFilters((f) => ({ ...f, region })),
     setImportance: (importance: string) => setFilters((f) => ({ ...f, importance })),
+    setEdition: (edition: string) => setFilters((f) => ({ ...f, edition })),
     setDateFrom: (dateFrom: string) => setFilters((f) => ({ ...f, dateFrom })),
     setDateTo: (dateTo: string) => setFilters((f) => ({ ...f, dateTo })),
     refetch,

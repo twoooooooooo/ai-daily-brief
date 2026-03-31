@@ -13,12 +13,17 @@ import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import LoadingSkeleton from "@/components/LoadingSkeleton";
 import ErrorState from "@/components/ErrorState";
-import { categoryFilters, categoryLabels, importanceFilters, regionFilters } from "@/data/constants";
+import { categoryFilters, categoryLabels, editionFilters, importanceFilters, regionFilters } from "@/data/constants";
+
+const editionLabels: Record<"Morning" | "Afternoon", string> = {
+  Morning: "오전 브리핑",
+  Afternoon: "오후 브리핑",
+};
 
 const Archive = () => {
   const {
     isLoading, isFetching, isError, error, briefings, filters,
-    setSearch, setCategory, setRegion, setImportance, setDateFrom, setDateTo,
+    setSearch, setCategory, setRegion, setImportance, setEdition, setDateFrom, setDateTo,
     refetch,
   } = useArchive();
 
@@ -149,6 +154,14 @@ const Archive = () => {
                 </button>
               ))}
             </FilterGroup>
+            <div className="hidden sm:block h-5 w-px bg-border" />
+            <FilterGroup label="브리핑">
+              {editionFilters.map((edition) => (
+                <button key={edition} onClick={() => setEdition(edition)} className={cn(chipBase, filters.edition === edition ? chipActive : chipInactive)}>
+                  {edition}
+                </button>
+              ))}
+            </FilterGroup>
           </div>
         </div>
       </div>
@@ -231,6 +244,9 @@ const ArchiveBriefingCard = ({ briefing, index }: { briefing: Briefing; index: n
                       높음 {highCount}
                     </span>
                   )}
+                  <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                    {editionLabels[briefing.edition]}
+                  </span>
                   <span className="inline-flex items-center gap-1 rounded-full bg-accent/10 px-2 py-0.5 text-[10px] font-medium text-accent">
                     <Layers className="h-2.5 w-2.5" />
                     {categoryLabels[briefing.dailySummary.topCategory] ?? briefing.dailySummary.topCategory}

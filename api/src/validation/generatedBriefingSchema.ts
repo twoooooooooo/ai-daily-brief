@@ -1,7 +1,9 @@
-import type { Briefing, Category, DailySummary, Importance, Issue, Region, ResearchHighlight } from "../shared/contracts.js";
+import type { Briefing, BriefingEdition, Category, DailySummary, Importance, Issue, Region, ResearchHighlight } from "../shared/contracts.js";
+import { buildBriefingId } from "../utils/briefingEdition.js";
 
 export interface GeneratedBriefingPayload {
   date: string;
+  edition?: BriefingEdition;
   dailySummary: DailySummary;
   issues: Issue[];
   researchHighlights: ResearchHighlight[];
@@ -139,11 +141,11 @@ function normalizeDailySummary(value: unknown, totalArticles: number): DailySumm
   };
 }
 
-function buildBriefingId(date: string): string {
-  return `briefing-${date}`;
+function ensureEdition(value: unknown, fallbackEdition: BriefingEdition): BriefingEdition {
+  return value === "Morning" || value === "Afternoon" ? value : fallbackEdition;
 }
 
-export function parseGeneratedBriefingPayload(payload: unknown, fallbackDate: string): Briefing {
+export function parseGeneratedBriefingPayload(payload: unknown, fallbackDate: string, fallbackEdition: BriefingEdition): Briefing {
   if (!isRecord(payload)) {
     throw new GeneratedBriefingValidationError("Invalid generated briefing payload.");
   }
@@ -157,6 +159,7 @@ export function parseGeneratedBriefingPayload(payload: unknown, fallbackDate: st
   const date = typeof payload.date === "string" && payload.date.trim()
     ? payload.date.trim()
     : fallbackDate;
+  const edition = ensureEdition(payload.edition, fallbackEdition);
 
   const issues = Array.isArray(payload.issues)
     ? payload.issues.map((item) => normalizeIssue(item, date))
@@ -169,8 +172,9 @@ export function parseGeneratedBriefingPayload(payload: unknown, fallbackDate: st
   const totalArticles = issues.length + researchHighlights.length;
 
   return {
-    id: buildBriefingId(date),
+    id: buildBriefingId(date, edition),
     date,
+    edition,
     dailySummary: normalizeDailySummary(payload.dailySummary, totalArticles),
     issues,
     researchHighlights,

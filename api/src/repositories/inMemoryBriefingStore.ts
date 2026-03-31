@@ -1,6 +1,8 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { getBriefingStorageSettings } from "../config/runtimeConfig.js";
+import type { BriefingEdition } from "../shared/contracts.js";
+import { getEditionRank } from "../utils/briefingEdition.js";
 import { createLogger } from "../utils/logger.js";
 import type {
   BriefingRecord,
@@ -17,7 +19,6 @@ interface PersistedBriefingStoreFile {
 }
 
 const briefingRecords = new Map<string, BriefingRecord>();
-const briefingIdsByDate = new Map<string, string>();
 const issueRecordsByBriefingId = new Map<string, IssueRecord[]>();
 const researchHighlightRecordsByBriefingId = new Map<string, ResearchHighlightRecord[]>();
 const logger = createLogger("briefing-store");
@@ -70,9 +71,30 @@ function buildBundleFromId(id: string): StoredBriefingBundle | null {
   });
 }
 
+function compareBriefingRecords(left: BriefingRecord, right: BriefingRecord): number {
+  const dateComparison = right.date.localeCompare(left.date);
+  if (dateComparison !== 0) {
+    return dateComparison;
+  }
+
+  const editionComparison = getEditionRank(right.edition) - getEditionRank(left.edition);
+  if (editionComparison !== 0) {
+    return editionComparison;
+  }
+
+  return right.updatedAt.localeCompare(left.updatedAt);
+}
+
+function findLatestBriefingIdForDate(date: string): string | null {
+  const matchingRecords = [...briefingRecords.values()]
+    .filter((record) => record.date === date)
+    .sort(compareBriefingRecords);
+
+  return matchingRecords[0]?.id ?? null;
+}
+
 function resetStore(): void {
   briefingRecords.clear();
-  briefingIdsByDate.clear();
   issueRecordsByBriefingId.clear();
   researchHighlightRecordsByBriefingId.clear();
 }
@@ -90,7 +112,6 @@ function hydrateStore(data: PersistedBriefingStoreFile): void {
 
   for (const briefing of data.briefings) {
     briefingRecords.set(briefing.id, cloneBriefingRecord(briefing));
-    briefingIdsByDate.set(briefing.date, briefing.id);
   }
 
   for (const issue of data.issues) {
@@ -161,7 +182,6 @@ export class InMemoryBriefingStore implements BriefingStore {
   async saveBriefing(bundle: StoredBriefingBundle): Promise<void> {
     await ensureLoaded();
     briefingRecords.set(bundle.briefing.id, cloneBriefingRecord(bundle.briefing));
-    briefingIdsByDate.set(bundle.briefing.date, bundle.briefing.id);
     issueRecordsByBriefingId.set(bundle.briefing.id, cloneIssueRecords(bundle.issues));
     researchHighlightRecordsByBriefingId.set(
       bundle.briefing.id,
@@ -177,8 +197,14 @@ export class InMemoryBriefingStore implements BriefingStore {
 
   async getBriefingByDate(date: string): Promise<StoredBriefingBundle | null> {
     await ensureLoaded();
-    const briefingId = briefingIdsByDate.get(date);
+    const briefingId = findLatestBriefingIdForDate(date);
     return briefingId ? buildBundleFromId(briefingId) : null;
+  }
+
+  async getBriefingByDateAndEdition(date: string, edition: BriefingEdition): Promise<StoredBriefingBundle | null> {
+    await ensureLoaded();
+    const record = [...briefingRecords.values()].find((item) => item.date === date && item.edition === edition);
+    return record ? buildBundleFromId(record.id) : null;
   }
 
   async getTodayBriefing(today: string): Promise<StoredBriefingBundle | null> {
@@ -188,7 +214,7 @@ export class InMemoryBriefingStore implements BriefingStore {
   async listRecentBriefings(limit?: number): Promise<StoredBriefingBundle[]> {
     await ensureLoaded();
     const sortedRecords = [...briefingRecords.values()]
-      .sort((left, right) => right.date.localeCompare(left.date));
+      .sort(compareBriefingRecords);
 
     const limitedRecords = typeof limit === "number"
       ? sortedRecords.slice(0, limit)

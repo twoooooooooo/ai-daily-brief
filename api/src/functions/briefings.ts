@@ -2,7 +2,7 @@ import { app, type HttpRequest, type HttpResponseInit, type InvocationContext } 
 import { getBriefingByDate, getBriefingById, getTodayBriefing, listRecentBriefings, searchBriefings } from "../services/briefingRepository.js";
 import { badRequestResponse, internalErrorResponse, jsonResponse, notFoundResponse } from "../http/responses.js";
 import type { BriefingResponse } from "../shared/contracts.js";
-import type { ArticleType, Category, Importance, Region } from "../shared/contracts.js";
+import type { ArticleType, BriefingEdition, Category, Importance, Region } from "../shared/contracts.js";
 
 async function handleRequest(
   context: InvocationContext,
@@ -116,6 +116,7 @@ export async function searchBriefingsHandler(
 
     const results = await searchBriefings({
       query: request.query.get("q")?.trim() ?? "",
+      edition: getEnumQueryValue<BriefingEdition>(request, "edition", ["Morning", "Afternoon"]),
       category: getEnumQueryValue<Category>(request, "category", ["Model", "Research", "Policy", "Product", "Investment", "Infrastructure"]),
       importance: getEnumQueryValue<Importance>(request, "importance", ["High", "Medium", "Low"]),
       region: getEnumQueryValue<Region>(request, "region", ["Global", "US", "Europe", "Asia"]),

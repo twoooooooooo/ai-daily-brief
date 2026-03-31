@@ -15,9 +15,15 @@ export interface BriefingStorageSettings {
   fallbackToMemory: boolean;
 }
 
-export interface ScheduleSettings {
+export interface ScheduledBriefingRunSettings {
+  edition: "Morning" | "Afternoon";
   cron: string;
+}
+
+export interface ScheduleSettings {
   enabled: boolean;
+  timezone: string;
+  runs: ScheduledBriefingRunSettings[];
 }
 
 export interface AdminApiSettings {
@@ -36,6 +42,7 @@ export interface EnvironmentSettings {
 const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
 const DEFAULT_OPENAI_MODEL = "gpt-4.1-mini";
 const DEFAULT_DAILY_BRIEFING_SCHEDULE = "0 0 6 * * *";
+const DEFAULT_AFTERNOON_BRIEFING_SCHEDULE = "0 0 14 * * *";
 
 function readEnv(name: string): string | undefined {
   const value = process.env[name]?.trim();
@@ -82,9 +89,19 @@ export function getBriefingStorageSettings(): BriefingStorageSettings {
 }
 
 export function getDailyBriefingScheduleSettings(): ScheduleSettings {
+  const morningSchedule = readEnv("MORNING_BRIEFING_SCHEDULE")
+    ?? readEnv("DAILY_BRIEFING_SCHEDULE")
+    ?? DEFAULT_DAILY_BRIEFING_SCHEDULE;
+  const afternoonSchedule = readEnv("AFTERNOON_BRIEFING_SCHEDULE")
+    ?? DEFAULT_AFTERNOON_BRIEFING_SCHEDULE;
+
   return {
-    cron: readEnv("DAILY_BRIEFING_SCHEDULE") ?? DEFAULT_DAILY_BRIEFING_SCHEDULE,
     enabled: readEnv("ENABLE_SCHEDULED_BRIEFING") === "true",
+    timezone: readEnv("BRIEFING_TIMEZONE") ?? "Asia/Seoul",
+    runs: [
+      { edition: "Morning", cron: morningSchedule },
+      { edition: "Afternoon", cron: afternoonSchedule },
+    ],
   };
 }
 

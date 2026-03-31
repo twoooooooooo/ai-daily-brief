@@ -2,6 +2,7 @@ export type Category = "Model" | "Research" | "Policy" | "Product" | "Investment
 export type Importance = "High" | "Medium" | "Low";
 export type Region = "Global" | "US" | "Europe" | "Asia";
 export type ArticleType = "news" | "research";
+export type BriefingEdition = "Morning" | "Afternoon";
 
 export interface Issue {
   id: string;
@@ -41,6 +42,7 @@ export interface DailySummary {
 export interface Briefing {
   id: string;
   date: string;
+  edition: BriefingEdition;
   lastUpdatedAt?: string;
   dailySummary: DailySummary;
   issues: Issue[];
@@ -51,6 +53,7 @@ export interface Briefing {
 
 export interface BriefingResponse {
   articles: Issue[];
+  edition?: BriefingEdition;
   summary: DailySummary;
   trendingTopics: string[];
   trendingTopicsEn: string[];
@@ -65,6 +68,7 @@ export interface DailyBriefingJob {
   createdAt: string;
   updatedAt: string;
   date?: string;
+  edition?: BriefingEdition;
   overwrite: boolean;
   briefingId?: string;
   error?: string;
@@ -78,6 +82,7 @@ export interface ArticleFilters {
 }
 
 export interface ArchiveFilters extends ArticleFilters {
+  edition: string;
   dateFrom: string;
   dateTo: string;
 }

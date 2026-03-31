@@ -1,4 +1,4 @@
-import type { Briefing, Category, DailySummary, Issue, ResearchHighlight } from "../shared/contracts.js";
+import type { Briefing, BriefingEdition, Category, DailySummary, Issue, ResearchHighlight } from "../shared/contracts.js";
 
 const todayIssues: Issue[] = [
   {
@@ -69,6 +69,7 @@ const todaySummary: DailySummary = {
 
 function buildBriefing(
   date: string,
+  edition: BriefingEdition,
   summaryTrend: string,
   topKeywords: string[],
   topCategory: Category,
@@ -77,8 +78,9 @@ function buildBriefing(
   topics: string[],
 ): Briefing {
   return {
-    id: `briefing-${date}`,
+    id: `briefing-${date}-${edition.toLowerCase()}`,
     date,
+    edition,
     dailySummary: {
       trend: summaryTrend,
       trendEn: summaryTrend,
@@ -97,6 +99,7 @@ function buildBriefing(
 
 export const todayBriefing: Briefing = buildBriefing(
   "2026-03-27",
+  "Morning",
   todaySummary.trend,
   todaySummary.topKeywords,
   todaySummary.topCategory,
@@ -108,6 +111,7 @@ export const todayBriefing: Briefing = buildBriefing(
 export const archiveBriefings: Briefing[] = [
   buildBriefing(
     "2026-03-26",
+    "Morning",
     "Google이 Gemini 2.5를 발표하고, 미국 상원에서 AI 안전 법안 청문회가 열렸다.",
     ["Gemini", "에이전트", "안전성", "미국 정책", "멀티모달"],
     "Model",

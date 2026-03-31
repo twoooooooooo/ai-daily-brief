@@ -6,6 +6,7 @@ import { getDailyBriefingJob, startDailyBriefingJob } from "../services/dailyBri
 import { DailyBriefingPipelineError, runDailyBriefingPipeline } from "../services/dailyBriefingPipeline.js";
 import { saveBriefingWithOptions } from "../services/briefingRepository.js";
 import { ingestConfiguredRssFeeds } from "../services/rssIngestionService.js";
+import type { BriefingEdition } from "../shared/contracts.js";
 import type { NormalizedArticle } from "../shared/rss.js";
 import { createCorrelationId, createLogger } from "../utils/logger.js";
 
@@ -114,6 +115,10 @@ function parseOptionalBoolean(value: unknown): boolean {
   return value === true;
 }
 
+function parseOptionalEdition(value: unknown): BriefingEdition | undefined {
+  return value === "Morning" || value === "Afternoon" ? value : undefined;
+}
+
 function parseOptionalNumber(value: unknown): number | undefined {
   if (typeof value !== "number" || !Number.isFinite(value)) {
     return undefined;
@@ -167,11 +172,13 @@ export async function generateBriefingHandler(
     }
 
     const date = typeof payload.date === "string" ? payload.date : undefined;
+    const edition = parseOptionalEdition(payload.edition);
     const shouldSave = parseOptionalBoolean(payload.save);
     const overwrite = parseOptionalBoolean(payload.overwrite);
     const generatedBriefing = await generateDailyBriefing({
       articles,
       date,
+      edition,
       logContext,
     });
     const briefing = shouldSave
@@ -208,9 +215,11 @@ export async function runDailyBriefingHandler(
     }
 
     const date = typeof payload.date === "string" ? payload.date : undefined;
+    const edition = parseOptionalEdition(payload.edition);
     const overwrite = parseOptionalBoolean(payload.overwrite);
     const job = startDailyBriefingJob({
       date,
+      edition,
       overwrite,
       logContext,
     });
@@ -430,6 +439,7 @@ export async function probePersistenceHandler(
     const briefing = await saveBriefingWithOptions({
       id: `probe-briefing-${Date.now()}`,
       date,
+      edition: "Morning",
       dailySummary: {
         trend: "Probe persistence trend",
         trendEn: "Probe persistence trend",

@@ -1,4 +1,4 @@
-import type { Briefing } from "../shared/contracts.js";
+import type { Briefing, BriefingEdition } from "../shared/contracts.js";
 import type { NormalizedArticle } from "../shared/rss.js";
 import {
   DAILY_BRIEFING_FIELD_LOCALIZATION_SYSTEM_PROMPT,
@@ -9,6 +9,7 @@ import {
   buildDailyBriefingUserPrompt,
 } from "../prompts/dailyBriefing/index.js";
 import { getOpenAISettings } from "../config/runtimeConfig.js";
+import { buildBriefingId, resolveBriefingDate, resolveBriefingEdition } from "../utils/briefingEdition.js";
 import { GeneratedBriefingValidationError, parseGeneratedBriefingPayload } from "../validation/generatedBriefingSchema.js";
 import { createLogger, type LogContext } from "../utils/logger.js";
 import { withRetry } from "../utils/retry.js";
@@ -17,6 +18,7 @@ const logger = createLogger("briefing-generation");
 interface GenerateBriefingInput {
   articles: NormalizedArticle[];
   date?: string;
+  edition?: BriefingEdition;
   logContext?: LogContext;
 }
 
@@ -88,7 +90,7 @@ export class BriefingGenerationError extends Error {
   }
 }
 
-function parseBriefingResponse(content: string, fallbackDate: string): Briefing {
+function parseBriefingResponse(content: string, fallbackDate: string, fallbackEdition: BriefingEdition): Briefing {
   let parsed: unknown;
 
   try {
@@ -98,7 +100,7 @@ function parseBriefingResponse(content: string, fallbackDate: string): Briefing 
   }
 
   try {
-    return parseGeneratedBriefingPayload(parsed, fallbackDate);
+    return parseGeneratedBriefingPayload(parsed, fallbackDate, fallbackEdition);
   } catch (error) {
     if (error instanceof GeneratedBriefingValidationError) {
       throw new BriefingGenerationError(error.message, error);
@@ -110,7 +112,7 @@ function parseBriefingResponse(content: string, fallbackDate: string): Briefing 
 
 function resolveRequestDate(date?: string): string {
   if (!date) {
-    return new Date().toISOString().slice(0, 10);
+    return resolveBriefingDate();
   }
 
   const parsed = new Date(date);
@@ -119,6 +121,15 @@ function resolveRequestDate(date?: string): string {
   }
 
   return parsed.toISOString().slice(0, 10);
+}
+
+function applyBriefingIdentity(briefing: Briefing, date: string, edition: BriefingEdition): Briefing {
+  return {
+    ...briefing,
+    id: buildBriefingId(date, edition),
+    date,
+    edition,
+  };
 }
 
 function getOpenAIApiKey(): string {
@@ -426,7 +437,7 @@ async function localizeBriefingForKoreanAudience(briefing: Briefing, logContext:
     logContext,
   );
 
-  return parseBriefingResponse(localizedContent, briefing.date);
+  return parseBriefingResponse(localizedContent, briefing.date, briefing.edition);
 }
 
 function parseLocalizedFieldItems(value: unknown): LocalizedBriefingFieldItem[] {
@@ -534,14 +545,20 @@ export async function generateDailyBriefing(input: GenerateBriefingInput): Promi
   }
 
   const date = resolveRequestDate(input.date);
+  const edition = input.edition ?? resolveBriefingEdition();
   const selectedArticles = selectArticlesForGeneration(input.articles);
   scopedLogger.info("Generating daily briefing.", {
     date,
+    edition,
     articleCount: input.articles.length,
     selectedArticleCount: selectedArticles.length,
   });
   const generatedContent = await requestGeneratedBriefing(selectedArticles, date, input.logContext);
-  let briefing = cloneEnglishFieldsIntoLocalizedShape(parseBriefingResponse(generatedContent, date));
+  let briefing = applyBriefingIdentity(
+    cloneEnglishFieldsIntoLocalizedShape(parseBriefingResponse(generatedContent, date, edition)),
+    date,
+    edition,
+  );
 
   if (needsKoreanLocalization(briefing)) {
     scopedLogger.info("Applying Korean display-field localization pass to generated briefing.", {

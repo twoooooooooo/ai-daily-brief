@@ -1,16 +1,18 @@
 import { app, type InvocationContext, type Timer } from "@azure/functions";
-import { getDailyBriefingScheduleConfig } from "../config/schedules.js";
+import { getDailyBriefingScheduleConfigs } from "../config/schedules.js";
 import { runDailyBriefingPipeline } from "../services/dailyBriefingPipeline.js";
 import { createCorrelationId, createLogger } from "../utils/logger.js";
 
 const logger = createLogger("scheduled-briefing");
-const scheduleConfig = getDailyBriefingScheduleConfig();
+const scheduleConfigs = getDailyBriefingScheduleConfigs();
 
 export async function scheduledDailyBriefingHandler(
   timer: Timer,
   context: InvocationContext,
+  edition: "Morning" | "Afternoon",
+  schedule: string,
 ): Promise<void> {
-  const correlationId = createCorrelationId("scheduledDailyBriefing");
+  const correlationId = createCorrelationId(`scheduledDailyBriefing${edition}`);
   const scopedLogger = logger.child({
     component: "timer",
     operationName: "scheduledDailyBriefing",
@@ -22,12 +24,14 @@ export async function scheduledDailyBriefingHandler(
     isPastDue: timer.isPastDue,
     lastRun: timer.scheduleStatus?.last,
     nextRun: timer.scheduleStatus?.next,
-    schedule: scheduleConfig.schedule,
+    schedule,
+    edition,
     invocationId: context.invocationId,
   });
 
   try {
     const briefing = await runDailyBriefingPipeline({
+      edition,
       logContext: {
         correlationId,
         invocationId: context.invocationId,
@@ -38,31 +42,41 @@ export async function scheduledDailyBriefingHandler(
     scopedLogger.info("Scheduled daily briefing job completed.", {
       briefingId: briefing.id,
       date: briefing.date,
+      edition: briefing.edition,
       articleCount: briefing.issues.length + briefing.researchHighlights.length,
       invocationId: context.invocationId,
     });
   } catch (error) {
     scopedLogger.exception("Scheduled daily briefing job failed.", error, {
-      schedule: scheduleConfig.schedule,
+      schedule,
+      edition,
     });
     throw error;
   }
 }
 
-if (scheduleConfig.enabled) {
-  app.timer("scheduledDailyBriefing", {
-    schedule: scheduleConfig.schedule,
-    useMonitor: false,
-    runOnStartup: false,
-    retry: {
-      strategy: "fixedDelay",
-      maxRetryCount: 2,
-      delayInterval: 60_000,
-    },
-    handler: scheduledDailyBriefingHandler,
-  });
-} else {
-  logger.info("Scheduled daily briefing timer is disabled.", {
-    schedule: scheduleConfig.schedule,
-  });
+for (const scheduleConfig of scheduleConfigs) {
+  if (scheduleConfig.enabled) {
+    app.timer(`scheduled${scheduleConfig.edition}Briefing`, {
+      schedule: scheduleConfig.schedule,
+      useMonitor: false,
+      runOnStartup: false,
+      retry: {
+        strategy: "fixedDelay",
+        maxRetryCount: 2,
+        delayInterval: 60_000,
+      },
+      handler: (timer, context) => scheduledDailyBriefingHandler(
+        timer,
+        context,
+        scheduleConfig.edition,
+        scheduleConfig.schedule,
+      ),
+    });
+  } else {
+    logger.info("Scheduled daily briefing timer is disabled.", {
+      edition: scheduleConfig.edition,
+      schedule: scheduleConfig.schedule,
+    });
+  }
 }
