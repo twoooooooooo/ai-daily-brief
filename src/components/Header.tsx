@@ -35,7 +35,7 @@ const Header = () => {
               <div>
                 <div className="flex items-center gap-2.5">
                   <h1 className="font-display text-xl font-bold tracking-tight text-foreground sm:text-2xl">
-                    AI Global Daily Brief
+                    Global AI Daily Brief
                   </h1>
                   <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-accent/10 border border-accent/15 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-accent">
                     <Clock className="h-2.5 w-2.5" />
