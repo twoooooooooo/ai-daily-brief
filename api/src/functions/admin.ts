@@ -371,6 +371,69 @@ export async function probeGenerationHandler(
   });
 }
 
+export async function probePersistenceHandler(
+  request: HttpRequest,
+  context: InvocationContext,
+): Promise<HttpResponseInit> {
+  return handleAdminRequest(context, "probePersistence", async (logContext) => {
+    const adminKey = request.query.get("adminKey");
+    const payload = adminKey ? { adminApiKey: adminKey } : {};
+
+    if (!isAuthorizedAdminRequest(request, payload)) {
+      logger.child(logContext).warn("Rejected unauthorized admin request.");
+      return unauthorizedResponse("Unauthorized admin operation.");
+    }
+
+    const timestamp = new Date().toISOString();
+    const date = timestamp.slice(0, 10);
+    const briefing = await saveBriefingWithOptions({
+      id: `probe-briefing-${Date.now()}`,
+      date,
+      dailySummary: {
+        trend: "Probe persistence trend",
+        trendEn: "Probe persistence trend",
+        topKeywords: ["probe"],
+        topKeywordsEn: ["probe"],
+        totalArticles: 1,
+        topCategory: "Model",
+        topMention: "probe",
+      },
+      issues: [{
+        id: `probe-issue-${Date.now()}`,
+        title: "Probe persistence title",
+        titleEn: "Probe persistence title",
+        category: "Model",
+        importance: "Low",
+        summary: "Probe persistence summary",
+        summaryEn: "Probe persistence summary",
+        whyItMatters: "Probe persistence why",
+        whyItMattersEn: "Probe persistence why",
+        practicalImpact: "Probe persistence impact",
+        practicalImpactEn: "Probe persistence impact",
+        keywords: ["probe"],
+        source: "System Probe",
+        sourceUrl: "https://example.com/probe",
+        region: "Global",
+        date,
+        type: "news",
+      }],
+      researchHighlights: [],
+      trendingTopics: ["probe"],
+      trendingTopicsEn: ["probe"],
+    }, {
+      overwrite: true,
+      logContext,
+    });
+
+    return jsonResponse({
+      ok: true,
+      briefingId: briefing.id,
+      date: briefing.date,
+      issueCount: briefing.issues.length,
+    });
+  });
+}
+
 app.http("ingestRss", {
   methods: ["POST"],
   authLevel: "anonymous",
@@ -418,4 +481,11 @@ app.http("probeGeneration", {
   authLevel: "anonymous",
   route: "ops/probe-generation",
   handler: probeGenerationHandler,
+});
+
+app.http("probePersistence", {
+  methods: ["GET", "POST"],
+  authLevel: "anonymous",
+  route: "ops/probe-persistence",
+  handler: probePersistenceHandler,
 });
