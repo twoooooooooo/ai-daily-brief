@@ -2,6 +2,7 @@ import type { Briefing } from "../shared/contracts.js";
 import { createCorrelationId, createLogger, type LogContext } from "../utils/logger.js";
 import { saveBriefingWithOptions } from "./briefingRepository.js";
 import { generateDailyBriefing } from "./briefingGenerationService.js";
+import { listStoredRssArticles } from "./rssArticleStore.js";
 import { ingestConfiguredRssFeeds } from "./rssIngestionService.js";
 
 interface RunDailyBriefingPipelineInput {
@@ -36,26 +37,38 @@ export async function runDailyBriefingPipeline(
     overwrite: input.overwrite === true,
   });
 
-  let ingestionResult;
-  try {
-    ingestionResult = await ingestConfiguredRssFeeds({
-      ...input.logContext,
-      component: "rss-ingestion",
-      operationName: "ingestConfiguredRssFeeds",
-      correlationId,
-    });
-  } catch (error) {
-    scopedLogger.exception("Daily briefing pipeline failed during RSS ingestion.", error, {
-      stage: "rss-ingestion",
+  const cachedArticles = listStoredRssArticles();
+  let articles = cachedArticles;
+
+  if (cachedArticles.length > 0) {
+    scopedLogger.info("Using cached RSS articles for daily briefing pipeline.", {
       date: targetDate,
+      cachedArticleCount: cachedArticles.length,
     });
-    throw new DailyBriefingPipelineError("Daily briefing pipeline failed during RSS ingestion.", error);
+  } else {
+    let ingestionResult;
+    try {
+      ingestionResult = await ingestConfiguredRssFeeds({
+        ...input.logContext,
+        component: "rss-ingestion",
+        operationName: "ingestConfiguredRssFeeds",
+        correlationId,
+      });
+    } catch (error) {
+      scopedLogger.exception("Daily briefing pipeline failed during RSS ingestion.", error, {
+        stage: "rss-ingestion",
+        date: targetDate,
+      });
+      throw new DailyBriefingPipelineError("Daily briefing pipeline failed during RSS ingestion.", error);
+    }
+
+    articles = ingestionResult.articles;
   }
 
   let briefing: Briefing;
   try {
     briefing = await generateDailyBriefing({
-      articles: ingestionResult.articles,
+      articles,
       date: input.date,
       logContext: {
         ...input.logContext,
