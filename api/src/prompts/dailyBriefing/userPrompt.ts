@@ -5,8 +5,7 @@ interface DailyBriefingUserPromptParams {
   date: string;
 }
 
-const MAX_SUMMARY_LENGTH = 400;
-const MAX_CONTENT_LENGTH = 800;
+const MAX_SUMMARY_LENGTH = 240;
 
 function truncate(value: string, maxLength: number): string {
   const normalized = value.trim();
@@ -26,7 +25,6 @@ function serializeArticles(articles: NormalizedArticle[]): string {
       sourceUrl: article.sourceUrl,
       publishedAt: article.publishedAt,
       summary: truncate(article.summary, MAX_SUMMARY_LENGTH),
-      content: article.content ? truncate(article.content, MAX_CONTENT_LENGTH) : "",
       type: article.type,
       category: article.category,
       region: article.region,
@@ -40,6 +38,7 @@ export function buildDailyBriefingUserPrompt({ articles, date }: DailyBriefingUs
   return `
 Generate a structured daily AI briefing for ${date} using the normalized articles below.
 Use Korean for the primary displayed fields, and use English only for the *En fields.
+Rely primarily on title, summary, source, category, and region. Ignore missing body content.
 
 Normalized articles:
 ${serializeArticles(articles)}
