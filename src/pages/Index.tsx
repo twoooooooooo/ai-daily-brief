@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Header from "@/components/Header";
 import HeroSummary from "@/components/HeroSummary";
 import FilterBar from "@/components/FilterBar";
@@ -16,8 +16,6 @@ import { Search, RefreshCw } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
-const showDevBriefingPanel = import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEV_PANEL !== "false";
-
 const Index = () => {
   const [showEnglishSummary, setShowEnglishSummary] = useState(false);
   const {
@@ -27,6 +25,16 @@ const Index = () => {
   } = useFilteredArticles();
 
   const [selectedArticle, setSelectedArticle] = useState<Issue | null>(null);
+  const showDevBriefingPanel = useMemo(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("admin") === "1") {
+        return true;
+      }
+    }
+
+    return import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEV_PANEL !== "false";
+  }, []);
 
   if (isLoading || (!isError && !summary)) {
     return (
