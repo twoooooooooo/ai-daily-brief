@@ -10,6 +10,20 @@ import { createCorrelationId, createLogger } from "../utils/logger.js";
 
 const logger = createLogger("admin-api");
 
+function extractErrorMessage(error: unknown): string | null {
+  if (!(error instanceof Error)) {
+    return null;
+  }
+
+  const cause = "cause" in error ? (error as Error & { cause?: unknown }).cause : undefined;
+  const causeMessage = extractErrorMessage(cause);
+  if (causeMessage && causeMessage !== error.message) {
+    return `${error.message}: ${causeMessage}`;
+  }
+
+  return error.message;
+}
+
 function isAuthorizedAdminRequest(request: HttpRequest): boolean {
   const adminApiSettings = getAdminApiSettings();
   const configuredApiKey = adminApiSettings.apiKey;
@@ -47,11 +61,11 @@ async function handleAdminRequest(
     context.error("Admin API request failed", error);
 
     if (error instanceof BriefingGenerationError) {
-      return internalErrorResponse(error.message);
+      return internalErrorResponse(extractErrorMessage(error) ?? error.message);
     }
 
     if (error instanceof DailyBriefingPipelineError) {
-      return internalErrorResponse(error.message);
+      return internalErrorResponse(extractErrorMessage(error) ?? error.message);
     }
 
     return internalErrorResponse("Failed to execute admin operation.");
