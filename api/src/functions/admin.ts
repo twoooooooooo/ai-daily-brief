@@ -211,13 +211,7 @@ export async function runDailyBriefingHandler(
       logContext,
     });
 
-    return jsonResponse({
-      jobId: job.id,
-      status: job.status,
-      createdAt: job.createdAt,
-      date: job.date,
-      overwrite: job.overwrite,
-    }, 202);
+    return jsonResponse(job, 202);
   });
 }
 
