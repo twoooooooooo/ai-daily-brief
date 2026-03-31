@@ -1,6 +1,7 @@
 import { app, type HttpRequest, type HttpResponseInit, type InvocationContext } from "@azure/functions";
 import { getBriefingByDate, getBriefingById, getTodayBriefing, listRecentBriefings, searchBriefings } from "../services/briefingRepository.js";
 import { badRequestResponse, internalErrorResponse, jsonResponse, notFoundResponse } from "../http/responses.js";
+import type { BriefingResponse } from "../shared/contracts.js";
 import type { ArticleType, Category, Importance, Region } from "../shared/contracts.js";
 
 async function handleRequest(
@@ -35,15 +36,30 @@ function getEnumQueryValue<T extends string>(request: HttpRequest, name: string,
   return allowedValues.includes(value as T) ? value as T : undefined;
 }
 
+function createEmptyBriefingResponse(): BriefingResponse {
+  return {
+    articles: [],
+    summary: {
+      trend: "No persisted briefing is available yet.",
+      trendEn: "No persisted briefing is available yet.",
+      topKeywords: [],
+      topKeywordsEn: [],
+      totalArticles: 0,
+      topCategory: "Model",
+      topMention: "-",
+    },
+    trendingTopics: [],
+    trendingTopicsEn: [],
+  };
+}
+
 export async function getTodayBriefingHandler(
   _request: HttpRequest,
   context: InvocationContext,
 ): Promise<HttpResponseInit> {
   return handleRequest(context, async () => {
     const briefing = await getTodayBriefing();
-    return briefing
-      ? jsonResponse(briefing)
-      : notFoundResponse("No persisted briefing is available yet.");
+    return jsonResponse(briefing ?? createEmptyBriefingResponse());
   });
 }
 
@@ -116,34 +132,34 @@ export async function searchBriefingsHandler(
 app.http("getTodayBriefing", {
   methods: ["GET"],
   authLevel: "anonymous",
-  route: "api/briefings/today",
+  route: "briefings/today",
   handler: getTodayBriefingHandler,
 });
 
 app.http("listBriefings", {
   methods: ["GET"],
   authLevel: "anonymous",
-  route: "api/briefings",
+  route: "briefings",
   handler: listBriefingsHandler,
 });
 
 app.http("getBriefingById", {
   methods: ["GET"],
   authLevel: "anonymous",
-  route: "api/briefings/{id:regex(^(?!today$).+)}",
+  route: "briefings/{id:regex(^(?!today$).+)}",
   handler: getBriefingByIdHandler,
 });
 
 app.http("getBriefingByDate", {
   methods: ["GET"],
   authLevel: "anonymous",
-  route: "api/briefings/date/{date}",
+  route: "briefings/date/{date}",
   handler: getBriefingByDateHandler,
 });
 
 app.http("searchBriefings", {
   methods: ["GET"],
   authLevel: "anonymous",
-  route: "api/search",
+  route: "search",
   handler: searchBriefingsHandler,
 });

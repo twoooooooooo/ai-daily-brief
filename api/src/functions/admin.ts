@@ -173,27 +173,20 @@ export async function runDailyBriefingHandler(
 app.http("ingestRss", {
   methods: ["POST"],
   authLevel: "anonymous",
-  route: "api/ops/ingest-rss",
+  route: "ops/ingest-rss",
   handler: ingestRssHandler,
 });
 
 app.http("generateBriefing", {
   methods: ["POST"],
   authLevel: "anonymous",
-  route: "api/ops/generate-briefing",
+  route: "ops/generate-briefing",
   handler: generateBriefingHandler,
 });
 
 app.http("runDailyBriefing", {
   methods: ["GET", "POST"],
   authLevel: "anonymous",
-  route: "api/ops/run-daily-briefing",
-  handler: runDailyBriefingHandler,
-});
-
-app.http("runDailyBriefingAdmin", {
-  methods: ["GET", "POST"],
-  authLevel: "anonymous",
-  route: "api/admin/run-daily-briefing",
+  route: "ops/run-daily-briefing",
   handler: runDailyBriefingHandler,
 });

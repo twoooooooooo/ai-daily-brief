@@ -12,6 +12,33 @@ export class BriefingServiceError extends Error {
 
 const configuredAdminApiKey = import.meta.env.VITE_ADMIN_API_KEY?.trim();
 
+function createEmptyBriefingResponse(): BriefingResponse {
+  return {
+    articles: [],
+    summary: {
+      trend: "아직 저장된 브리핑이 없습니다.",
+      trendEn: "No briefing has been generated yet.",
+      topKeywords: [],
+      topKeywordsEn: [],
+      totalArticles: 0,
+      topCategory: "Model",
+      topMention: "-",
+    },
+    trendingTopics: [],
+    trendingTopicsEn: [],
+  };
+}
+
+function toBriefingResponse(briefing: Briefing): BriefingResponse {
+  return {
+    articles: [...briefing.issues, ...briefing.researchHighlights],
+    summary: briefing.dailySummary,
+    trendingTopics: briefing.trendingTopics,
+    trendingTopicsEn: briefing.trendingTopicsEn,
+    lastUpdatedAt: briefing.lastUpdatedAt,
+  };
+}
+
 function normalizeBriefingId(id: string): string {
   return decodeURIComponent(id).trim().replace(/^\/+|\/+$/g, "");
 }
@@ -262,7 +289,20 @@ export async function generateDailySummary(articles: Issue[]): Promise<DailySumm
 // ─── Main orchestrator ──────────────────────────────────────────────────────
 
 export async function fetchBriefing(): Promise<BriefingResponse> {
-  return fetchJson<BriefingResponse>(endpoints.todayBriefing, "브리핑 데이터를 불러오지 못했습니다.");
+  try {
+    return await fetchJson<BriefingResponse>(endpoints.todayBriefing, "브리핑 데이터를 불러오지 못했습니다.");
+  } catch (error) {
+    if (!(error instanceof BriefingServiceError) || !error.message.includes("(404)")) {
+      throw error;
+    }
+
+    const recentBriefings = await fetchArchiveBriefings();
+    if (recentBriefings.length > 0) {
+      return toBriefingResponse(recentBriefings[0]);
+    }
+
+    return createEmptyBriefingResponse();
+  }
 }
 
 // ─── Archive service ────────────────────────────────────────────────────────

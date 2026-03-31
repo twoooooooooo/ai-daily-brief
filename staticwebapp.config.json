@@ -5,6 +5,11 @@
   },
   "routes": [
     {
+      "route": "/api/admin/run-daily-briefing",
+      "rewrite": "/api/ops/run-daily-briefing",
+      "methods": ["GET", "POST"]
+    },
+    {
       "route": "/api/*",
       "allowedRoles": ["authenticated", "anonymous"]
     }
