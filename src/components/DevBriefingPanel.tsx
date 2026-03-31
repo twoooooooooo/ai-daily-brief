@@ -1,19 +1,21 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { runDailyBriefingGeneration } from "@/services/briefingService";
+import { Input } from "@/components/ui/input";
 import type { Briefing } from "@/types";
 
 const DevBriefingPanel = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [briefing, setBriefing] = useState<Briefing | null>(null);
+  const [adminApiKey, setAdminApiKey] = useState("");
 
   const handleRunPipeline = async () => {
     setIsLoading(true);
     setError(null);
 
     try {
-      const nextBriefing = await runDailyBriefingGeneration();
+      const nextBriefing = await runDailyBriefingGeneration(undefined, adminApiKey);
       setBriefing(nextBriefing);
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "브리핑 생성 중 오류가 발생했습니다.");
@@ -35,9 +37,19 @@ const DevBriefingPanel = () => {
               RSS ingest + OpenAI briefing generation을 로컬에서 빠르게 테스트합니다.
             </p>
           </div>
-          <Button onClick={handleRunPipeline} disabled={isLoading} className="sm:self-start">
-            {isLoading ? "생성 중..." : "Run Daily Briefing"}
-          </Button>
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:min-w-[320px]">
+            <Input
+              type="password"
+              value={adminApiKey}
+              onChange={(event) => setAdminApiKey(event.target.value)}
+              placeholder="Admin API key"
+              autoComplete="off"
+              className="h-9 bg-background/80"
+            />
+            <Button onClick={handleRunPipeline} disabled={isLoading} className="sm:self-start">
+              {isLoading ? "생성 중..." : "Run Daily Briefing"}
+            </Button>
+          </div>
         </div>
 
         {error && (
