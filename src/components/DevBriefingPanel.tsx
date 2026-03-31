@@ -1,10 +1,12 @@
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { runDailyBriefingGeneration } from "@/services/briefingService";
 import { Input } from "@/components/ui/input";
 import type { Briefing, DailyBriefingJob } from "@/types";
 
 const DevBriefingPanel = () => {
+  const queryClient = useQueryClient();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -42,6 +44,10 @@ const DevBriefingPanel = () => {
         },
       });
       setBriefing(nextBriefing);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["briefing"] }),
+        queryClient.invalidateQueries({ queryKey: ["archive"] }),
+      ]);
       setStatus("일일 브리핑이 생성되어 저장되었습니다.");
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "브리핑 생성 중 오류가 발생했습니다.");
