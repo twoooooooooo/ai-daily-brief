@@ -288,6 +288,77 @@ export async function diagnosePipelineHandler(
   });
 }
 
+export async function probeRssHandler(
+  request: HttpRequest,
+  context: InvocationContext,
+): Promise<HttpResponseInit> {
+  return handleAdminRequest(context, "probeRss", async (logContext) => {
+    const adminKey = request.query.get("adminKey");
+    const payload = adminKey ? { adminApiKey: adminKey } : {};
+
+    if (!isAuthorizedAdminRequest(request, payload)) {
+      logger.child(logContext).warn("Rejected unauthorized admin request.");
+      return unauthorizedResponse("Unauthorized admin operation.");
+    }
+
+    const rssResult = await ingestConfiguredRssFeeds(logContext);
+    return jsonResponse({
+      ok: true,
+      feedsProcessed: rssResult.feedsProcessed,
+      articlesDiscovered: rssResult.articlesDiscovered,
+      uniqueArticles: rssResult.uniqueArticles,
+      sampleArticles: rssResult.articles.slice(0, 3).map((article) => ({
+        id: article.id,
+        title: article.title,
+        source: article.source,
+        publishedAt: article.publishedAt,
+      })),
+    });
+  });
+}
+
+export async function probeGenerationHandler(
+  request: HttpRequest,
+  context: InvocationContext,
+): Promise<HttpResponseInit> {
+  return handleAdminRequest(context, "probeGeneration", async (logContext) => {
+    const adminKey = request.query.get("adminKey");
+    const payload = adminKey ? { adminApiKey: adminKey } : {};
+
+    if (!isAuthorizedAdminRequest(request, payload)) {
+      logger.child(logContext).warn("Rejected unauthorized admin request.");
+      return unauthorizedResponse("Unauthorized admin operation.");
+    }
+
+    const generatedBriefing = await generateDailyBriefing({
+      articles: [{
+        id: "probe-article-1",
+        title: "OpenAI probe article for deployment diagnostics",
+        source: "System Probe",
+        sourceUrl: "https://example.com/probe-article",
+        publishedAt: new Date().toISOString(),
+        summary: "This is a synthetic article used only to verify production briefing generation.",
+        content: "A synthetic article used to verify that the deployed environment can complete the structured briefing generation path.",
+        type: "news",
+        category: "Model",
+        region: "Global",
+        normalizedTitle: "openai probe article for deployment diagnostics",
+        feedId: "system-probe",
+        ingestedAt: new Date().toISOString(),
+      }],
+      logContext,
+    });
+
+    return jsonResponse({
+      ok: true,
+      briefingId: generatedBriefing.id,
+      issueCount: generatedBriefing.issues.length,
+      researchHighlightCount: generatedBriefing.researchHighlights.length,
+      trendingTopicCount: generatedBriefing.trendingTopics.length,
+    });
+  });
+}
+
 app.http("ingestRss", {
   methods: ["POST"],
   authLevel: "anonymous",
@@ -321,4 +392,18 @@ app.http("diagnosePipeline", {
   authLevel: "anonymous",
   route: "ops/diagnose-pipeline",
   handler: diagnosePipelineHandler,
+});
+
+app.http("probeRss", {
+  methods: ["GET", "POST"],
+  authLevel: "anonymous",
+  route: "ops/probe-rss",
+  handler: probeRssHandler,
+});
+
+app.http("probeGeneration", {
+  methods: ["GET", "POST"],
+  authLevel: "anonymous",
+  route: "ops/probe-generation",
+  handler: probeGenerationHandler,
 });
