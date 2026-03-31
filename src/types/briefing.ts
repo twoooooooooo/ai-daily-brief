@@ -57,6 +57,19 @@ export interface BriefingResponse {
   lastUpdatedAt?: string;
 }
 
+export type DailyBriefingJobStatus = "queued" | "running" | "completed" | "failed";
+
+export interface DailyBriefingJob {
+  id: string;
+  status: DailyBriefingJobStatus;
+  createdAt: string;
+  updatedAt: string;
+  date?: string;
+  overwrite: boolean;
+  briefingId?: string;
+  error?: string;
+}
+
 export interface ArticleFilters {
   search: string;
   category: string;

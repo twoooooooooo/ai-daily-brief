@@ -27,4 +27,6 @@ export const endpoints = {
   ingestRss: `${API_BASE_URL}/ops/ingest-rss`,
   /** GET|POST /api/ops/run-daily-briefing */
   runDailyBriefing: `${API_BASE_URL}/ops/run-daily-briefing`,
+  /** GET /api/ops/run-daily-briefing-jobs/:jobId */
+  runDailyBriefingJob: (jobId: string) => `${API_BASE_URL}/ops/run-daily-briefing-jobs/${encodeURIComponent(jobId.trim())}`,
 } as const;

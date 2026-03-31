@@ -2,6 +2,7 @@ import { app, type HttpRequest, type HttpResponseInit, type InvocationContext } 
 import { badRequestResponse, internalErrorResponse, jsonResponse, unauthorizedResponse } from "../http/responses.js";
 import { getAdminApiSettings } from "../config/runtimeConfig.js";
 import { BriefingGenerationError, generateDailyBriefing, probeOpenAIConnection } from "../services/briefingGenerationService.js";
+import { getDailyBriefingJob, startDailyBriefingJob } from "../services/dailyBriefingJobService.js";
 import { DailyBriefingPipelineError, runDailyBriefingPipeline } from "../services/dailyBriefingPipeline.js";
 import { saveBriefingWithOptions } from "../services/briefingRepository.js";
 import { ingestConfiguredRssFeeds } from "../services/rssIngestionService.js";
@@ -204,26 +205,46 @@ export async function runDailyBriefingHandler(
 
     const date = typeof payload.date === "string" ? payload.date : undefined;
     const overwrite = parseOptionalBoolean(payload.overwrite);
-    const compact = parseOptionalBoolean(payload.compact);
-    const skipIngestion = parseOptionalBoolean(payload.skipIngestion);
-    const briefing = await runDailyBriefingPipeline({
+    const job = startDailyBriefingJob({
       date,
       overwrite,
-      skipIngestion,
       logContext,
     });
-    if (compact) {
-      return jsonResponse({
-        briefingId: briefing.id,
-        date: briefing.date,
-        lastUpdatedAt: briefing.lastUpdatedAt,
-        issueCount: briefing.issues.length,
-        researchHighlightCount: briefing.researchHighlights.length,
-        trendingTopicCount: briefing.trendingTopics.length,
-      });
+
+    return jsonResponse({
+      jobId: job.id,
+      status: job.status,
+      createdAt: job.createdAt,
+      date: job.date,
+      overwrite: job.overwrite,
+    }, 202);
+  });
+}
+
+export async function getRunDailyBriefingJobHandler(
+  request: HttpRequest,
+  context: InvocationContext,
+): Promise<HttpResponseInit> {
+  return handleAdminRequest(context, "getRunDailyBriefingJob", async (logContext) => {
+    const adminKey = request.query.get("adminKey");
+    const payload = adminKey ? { adminApiKey: adminKey } : {};
+
+    if (!isAuthorizedAdminRequest(request, payload)) {
+      logger.child(logContext).warn("Rejected unauthorized admin request.");
+      return unauthorizedResponse("Unauthorized admin operation.");
     }
 
-    return jsonResponse(briefing);
+    const jobId = request.params.jobId?.trim();
+    if (!jobId) {
+      return badRequestResponse("Job id is required.");
+    }
+
+    const job = getDailyBriefingJob(jobId);
+    if (!job) {
+      return jsonResponse({ message: "Daily briefing job not found." }, 404);
+    }
+
+    return jsonResponse(job);
   });
 }
 
@@ -455,6 +476,13 @@ app.http("runDailyBriefing", {
   authLevel: "anonymous",
   route: "ops/run-daily-briefing",
   handler: runDailyBriefingHandler,
+});
+
+app.http("getRunDailyBriefingJob", {
+  methods: ["GET"],
+  authLevel: "anonymous",
+  route: "ops/run-daily-briefing-jobs/{jobId}",
+  handler: getRunDailyBriefingJobHandler,
 });
 
 app.http("probeOpenAI", {

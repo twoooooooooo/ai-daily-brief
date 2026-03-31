@@ -1,4 +1,4 @@
-import type { ArticleFilters, ArticleType, ArchiveFilters, Briefing, BriefingResponse, Category, DailySummary, Importance, Issue, Region } from "@/types";
+import type { ArticleFilters, ArticleType, ArchiveFilters, Briefing, BriefingResponse, Category, DailyBriefingJob, DailySummary, Importance, Issue, Region } from "@/types";
 import { endpoints } from "@/config/api";
 
 // ─── Configuration ──────────────────────────────────────────────────────────
@@ -11,6 +11,8 @@ export class BriefingServiceError extends Error {
 }
 
 const configuredAdminApiKey = import.meta.env.VITE_ADMIN_API_KEY?.trim();
+const JOB_POLL_INTERVAL_MS = 1500;
+const JOB_POLL_TIMEOUT_MS = 120000;
 
 function createEmptyBriefingResponse(): BriefingResponse {
   return {
@@ -196,6 +198,12 @@ async function postJson<T>(url: string, body: unknown, fallbackMessage: string, 
   return parseJsonResponse<T>(response, fallbackMessage);
 }
 
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
 function buildArchiveSearchParams(filters: ArchiveFilters): URLSearchParams {
   const params = new URLSearchParams();
 
@@ -363,10 +371,7 @@ export async function runDailyBriefingGeneration(date?: string, adminApiKey?: st
     adminHeaders,
   );
 
-  const requestBody: Record<string, string | boolean> = {
-    compact: true,
-    skipIngestion: true,
-  };
+  const requestBody: Record<string, string | boolean> = {};
 
   if (date) {
     requestBody.date = date;
@@ -376,26 +381,50 @@ export async function runDailyBriefingGeneration(date?: string, adminApiKey?: st
     requestBody.adminApiKey = effectiveAdminApiKey;
   }
 
-  const result = await postJson<{ briefingId?: string }>(
+  const job = await postJson<Pick<DailyBriefingJob, "id" | "status" | "createdAt" | "date" | "overwrite">>(
     endpoints.runDailyBriefing,
     requestBody,
     "일일 브리핑 생성에 실패했습니다.",
     adminHeaders,
   );
 
-  if (typeof result.briefingId === "string" && result.briefingId.trim()) {
-    const savedBriefing = await fetchBriefingById(result.briefingId);
-    if (savedBriefing) {
-      return savedBriefing;
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < JOB_POLL_TIMEOUT_MS) {
+    const querySuffix = effectiveAdminApiKey ? `?adminKey=${encodeURIComponent(effectiveAdminApiKey)}` : "";
+    const nextJob = await fetchJson<DailyBriefingJob>(
+      `${endpoints.runDailyBriefingJob(job.id)}${querySuffix}`,
+      "일일 브리핑 작업 상태를 불러오지 못했습니다.",
+    );
+
+    if (nextJob.status === "completed") {
+      if (typeof nextJob.briefingId === "string" && nextJob.briefingId.trim()) {
+        const savedBriefing = await fetchBriefingById(nextJob.briefingId);
+        if (savedBriefing) {
+          return savedBriefing;
+        }
+      }
+
+      const recentBriefings = await fetchArchiveBriefings();
+      if (recentBriefings.length > 0) {
+        return recentBriefings[0];
+      }
+
+      throw new BriefingServiceError("일일 브리핑 생성 후 저장된 결과를 다시 불러오지 못했습니다.");
     }
+
+    if (nextJob.status === "failed") {
+      throw new BriefingServiceError(
+        nextJob.error?.trim()
+          ? `일일 브리핑 생성에 실패했습니다.: ${nextJob.error}`
+          : "일일 브리핑 생성에 실패했습니다.",
+      );
+    }
+
+    await delay(JOB_POLL_INTERVAL_MS);
   }
 
-  const recentBriefings = await fetchArchiveBriefings();
-  if (recentBriefings.length > 0) {
-    return recentBriefings[0];
-  }
-
-  throw new BriefingServiceError("일일 브리핑 생성 후 저장된 결과를 다시 불러오지 못했습니다.");
+  throw new BriefingServiceError("일일 브리핑 생성 작업이 시간 내에 완료되지 않았습니다.");
 }
 
 // ─── Client-side article filtering ──────────────────────────────────────────
