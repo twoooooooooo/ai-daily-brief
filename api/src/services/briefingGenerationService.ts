@@ -20,7 +20,7 @@ interface GenerateBriefingInput {
   logContext?: LogContext;
 }
 
-const MAX_GENERATION_ARTICLES = 40;
+const MAX_GENERATION_ARTICLES = 20;
 
 interface OpenAIChatCompletionResponse {
   choices?: Array<{
@@ -421,21 +421,14 @@ export async function generateDailyBriefing(input: GenerateBriefingInput): Promi
   let briefing = cloneEnglishFieldsIntoLocalizedShape(parseBriefingResponse(generatedContent, date));
 
   if (needsKoreanLocalization(briefing)) {
-    scopedLogger.info("Applying Korean localization pass to generated briefing.", {
-      date,
-    });
-    briefing = await localizeBriefingForKoreanAudience(briefing, input.logContext);
-  }
-
-  if (needsKoreanLocalization(briefing)) {
-    scopedLogger.warn("Generated briefing still contains non-Korean primary display fields after full localization; applying field-level localization fallback.", {
+    scopedLogger.info("Applying Korean display-field localization pass to generated briefing.", {
       date,
     });
     briefing = await localizeDisplayedFieldsForKoreanAudience(briefing, input.logContext);
   }
 
   if (needsKoreanLocalization(briefing)) {
-    scopedLogger.warn("Generated briefing still contains non-Korean primary display fields after repeated localization; saving bilingual result anyway.", {
+    scopedLogger.warn("Generated briefing still contains non-Korean primary display fields after localization; saving bilingual result anyway.", {
       date,
     });
   }
