@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { runDailyBriefingGeneration } from "@/services/briefingService";
 import { Input } from "@/components/ui/input";
-import type { Briefing } from "@/types";
+import type { Briefing, DailyBriefingJob } from "@/types";
 
 const DevBriefingPanel = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -11,13 +11,36 @@ const DevBriefingPanel = () => {
   const [briefing, setBriefing] = useState<Briefing | null>(null);
   const [adminApiKey, setAdminApiKey] = useState("");
 
+  function toStatusMessage(job: DailyBriefingJob): string {
+    if (job.status === "queued") {
+      return "일일 브리핑 작업을 큐에 등록했습니다.";
+    }
+
+    if (job.status === "running") {
+      return "일일 브리핑을 생성하고 있습니다. 이 단계는 몇 분 걸릴 수 있습니다.";
+    }
+
+    if (job.status === "completed") {
+      return "일일 브리핑 생성이 완료되었습니다.";
+    }
+
+    return job.error?.trim()
+      ? `일일 브리핑 생성 작업이 실패했습니다: ${job.error}`
+      : "일일 브리핑 생성 작업이 실패했습니다.";
+  }
+
   const handleRunPipeline = async () => {
     setIsLoading(true);
     setError(null);
     setStatus("RSS를 수집하고 백그라운드 브리핑 작업을 시작하는 중입니다.");
 
     try {
-      const nextBriefing = await runDailyBriefingGeneration(undefined, adminApiKey);
+      const nextBriefing = await runDailyBriefingGeneration({
+        adminApiKey,
+        onJobStatus: (job) => {
+          setStatus(toStatusMessage(job));
+        },
+      });
       setBriefing(nextBriefing);
       setStatus("일일 브리핑이 생성되어 저장되었습니다.");
     } catch (caughtError) {

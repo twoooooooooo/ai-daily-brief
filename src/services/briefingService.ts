@@ -11,8 +11,14 @@ export class BriefingServiceError extends Error {
 }
 
 const configuredAdminApiKey = import.meta.env.VITE_ADMIN_API_KEY?.trim();
-const JOB_POLL_INTERVAL_MS = 1500;
-const JOB_POLL_TIMEOUT_MS = 120000;
+const JOB_POLL_INTERVAL_MS = 2000;
+const JOB_POLL_TIMEOUT_MS = 900000;
+
+interface RunDailyBriefingGenerationOptions {
+  date?: string;
+  adminApiKey?: string;
+  onJobStatus?: (job: DailyBriefingJob) => void;
+}
 
 function createEmptyBriefingResponse(): BriefingResponse {
   return {
@@ -360,8 +366,8 @@ export async function fetchBriefingById(id: string): Promise<Briefing | null> {
   );
 }
 
-export async function runDailyBriefingGeneration(date?: string, adminApiKey?: string): Promise<Briefing> {
-  const effectiveAdminApiKey = adminApiKey?.trim() || configuredAdminApiKey;
+export async function runDailyBriefingGeneration(options: RunDailyBriefingGenerationOptions = {}): Promise<Briefing> {
+  const effectiveAdminApiKey = options.adminApiKey?.trim() || configuredAdminApiKey;
   const adminHeaders = effectiveAdminApiKey ? { "x-admin-key": effectiveAdminApiKey } : {};
 
   await postJson<{ articlesDiscovered: number; uniqueArticles: number }>(
@@ -373,8 +379,8 @@ export async function runDailyBriefingGeneration(date?: string, adminApiKey?: st
 
   const requestBody: Record<string, string | boolean> = {};
 
-  if (date) {
-    requestBody.date = date;
+  if (options.date) {
+    requestBody.date = options.date;
   }
 
   if (effectiveAdminApiKey) {
@@ -396,6 +402,7 @@ export async function runDailyBriefingGeneration(date?: string, adminApiKey?: st
       `${endpoints.runDailyBriefingJob(job.id)}${querySuffix}`,
       "일일 브리핑 작업 상태를 불러오지 못했습니다.",
     );
+    options.onJobStatus?.(nextJob);
 
     if (nextJob.status === "completed") {
       if (typeof nextJob.briefingId === "string" && nextJob.briefingId.trim()) {
@@ -424,7 +431,7 @@ export async function runDailyBriefingGeneration(date?: string, adminApiKey?: st
     await delay(JOB_POLL_INTERVAL_MS);
   }
 
-  throw new BriefingServiceError("일일 브리핑 생성 작업이 시간 내에 완료되지 않았습니다.");
+  throw new BriefingServiceError("일일 브리핑 생성 작업이 아직 진행 중입니다. 잠시 후 다시 확인해주세요.");
 }
 
 // ─── Client-side article filtering ──────────────────────────────────────────
