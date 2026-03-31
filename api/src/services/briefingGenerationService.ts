@@ -23,7 +23,7 @@ interface GenerateBriefingInput {
   logContext?: LogContext;
 }
 
-const MAX_GENERATION_ARTICLES = 12;
+const MAX_GENERATION_ARTICLES = 16;
 
 interface OpenAIChatCompletionResponse {
   choices?: Array<{
@@ -189,7 +189,10 @@ function getSourcePriority(article: NormalizedArticle): number {
 
   if (source.includes("techcrunch")) return 3.5;
   if (source.includes("openai")) return 3.4;
+  if (source.includes("microsoft")) return 3.3;
   if (source.includes("google")) return 3.2;
+  if (source.includes("nvidia")) return 3.15;
+  if (source.includes("meta")) return 3.05;
   if (source.includes("arxiv")) return 2.2;
   return 2;
 }
@@ -354,15 +357,15 @@ function selectArticlesForGeneration(articles: NormalizedArticle[], priorBriefin
     const categoryCount = categoryCounts.get(article.category) ?? 0;
     const typeCount = typeCounts.get(article.type) ?? 0;
 
-    if (sourceCount >= 3) {
+    if (sourceCount >= 4) {
       continue;
     }
 
-    if (categoryCount >= 4) {
+    if (categoryCount >= 5) {
       continue;
     }
 
-    if (article.type === "research" && typeCount >= 4) {
+    if (article.type === "research" && typeCount >= 5) {
       continue;
     }
 
