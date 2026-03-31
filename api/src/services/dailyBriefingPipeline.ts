@@ -1,7 +1,7 @@
 import type { Briefing, BriefingEdition } from "../shared/contracts.js";
 import { createCorrelationId, createLogger, type LogContext } from "../utils/logger.js";
 import { resolveBriefingDate, resolveBriefingEdition } from "../utils/briefingEdition.js";
-import { saveBriefingWithOptions } from "./briefingRepository.js";
+import { listRecentBriefings, saveBriefingWithOptions } from "./briefingRepository.js";
 import { generateDailyBriefing } from "./briefingGenerationService.js";
 import { listStoredRssArticles } from "./rssArticleStore.js";
 import { ingestConfiguredRssFeeds } from "./rssIngestionService.js";
@@ -85,10 +85,15 @@ export async function runDailyBriefingPipeline(
 
   let briefing: Briefing;
   try {
+    const recentBriefings = await listRecentBriefings(6);
+    const priorBriefings = recentBriefings.filter((item) =>
+      item.date < targetDate || (item.date === targetDate && item.edition !== targetEdition));
+
     briefing = await generateDailyBriefing({
       articles,
       date: input.date,
       edition: targetEdition,
+      priorBriefings,
       logContext: {
         ...input.logContext,
         component: "briefing-generation",

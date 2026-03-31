@@ -19,6 +19,7 @@ interface GenerateBriefingInput {
   articles: NormalizedArticle[];
   date?: string;
   edition?: BriefingEdition;
+  priorBriefings?: Briefing[];
   logContext?: LogContext;
 }
 
@@ -231,16 +232,113 @@ function getSignalPriority(article: NormalizedArticle): number {
   return signals.reduce((score, signal) => score + (text.includes(signal) ? 0.35 : 0), 0);
 }
 
-function scoreArticle(article: NormalizedArticle): number {
+function normalizeText(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9가-힣]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+interface PriorCoverage {
+  hardExcludedIds: Set<string>;
+  hardExcludedUrls: Set<string>;
+  hardExcludedTitles: Set<string>;
+  recentIds: Set<string>;
+  recentUrls: Set<string>;
+  recentTitles: Set<string>;
+  recentKeywords: Set<string>;
+}
+
+function buildPriorCoverage(priorBriefings: Briefing[], date: string): PriorCoverage {
+  const hardExcludedIds = new Set<string>();
+  const hardExcludedUrls = new Set<string>();
+  const hardExcludedTitles = new Set<string>();
+  const recentIds = new Set<string>();
+  const recentUrls = new Set<string>();
+  const recentTitles = new Set<string>();
+  const recentKeywords = new Set<string>();
+
+  for (const briefing of priorBriefings) {
+    const articles = [...briefing.issues, ...briefing.researchHighlights];
+    const isSameDay = briefing.date === date;
+
+    for (const article of articles) {
+      const normalizedTitle = normalizeText(article.title);
+      recentIds.add(article.id);
+      recentUrls.add(article.sourceUrl);
+      recentTitles.add(normalizedTitle);
+      article.keywords.forEach((keyword) => recentKeywords.add(normalizeText(keyword)));
+
+      if (isSameDay) {
+        hardExcludedIds.add(article.id);
+        hardExcludedUrls.add(article.sourceUrl);
+        hardExcludedTitles.add(normalizedTitle);
+      }
+    }
+  }
+
+  return {
+    hardExcludedIds,
+    hardExcludedUrls,
+    hardExcludedTitles,
+    recentIds,
+    recentUrls,
+    recentTitles,
+    recentKeywords,
+  };
+}
+
+function getOverlapPenalty(article: NormalizedArticle, priorCoverage: PriorCoverage): number {
+  const normalizedTitle = normalizeText(article.title);
+
+  if (
+    priorCoverage.hardExcludedIds.has(article.id)
+    || priorCoverage.hardExcludedUrls.has(article.sourceUrl)
+    || priorCoverage.hardExcludedTitles.has(normalizedTitle)
+  ) {
+    return Number.NEGATIVE_INFINITY;
+  }
+
+  let penalty = 0;
+
+  if (priorCoverage.recentIds.has(article.id)) {
+    penalty += 6;
+  }
+
+  if (priorCoverage.recentUrls.has(article.sourceUrl)) {
+    penalty += 5;
+  }
+
+  if (priorCoverage.recentTitles.has(normalizedTitle)) {
+    penalty += 5;
+  }
+
+  for (const keyword of normalizeText(`${article.title} ${article.summary}`).split(" ")) {
+    if (keyword.length >= 3 && priorCoverage.recentKeywords.has(keyword)) {
+      penalty += 0.2;
+    }
+  }
+
+  return penalty;
+}
+
+function scoreArticle(article: NormalizedArticle, priorCoverage: PriorCoverage): number {
+  const overlapPenalty = getOverlapPenalty(article, priorCoverage);
+  if (!Number.isFinite(overlapPenalty)) {
+    return Number.NEGATIVE_INFINITY;
+  }
+
   return getSourcePriority(article)
     + getCategoryPriority(article)
     + getRecencyPriority(article)
-    + getSignalPriority(article);
+    + getSignalPriority(article)
+    - overlapPenalty;
 }
 
-function selectArticlesForGeneration(articles: NormalizedArticle[]): NormalizedArticle[] {
+function selectArticlesForGeneration(articles: NormalizedArticle[], priorBriefings: Briefing[], date: string): NormalizedArticle[] {
+  const priorCoverage = buildPriorCoverage(priorBriefings, date);
   const rankedArticles = [...articles]
-    .sort((left, right) => scoreArticle(right) - scoreArticle(left));
+    .map((article) => ({ article, score: scoreArticle(article, priorCoverage) }))
+    .filter((entry) => Number.isFinite(entry.score))
+    .sort((left, right) => right.score - left.score)
+    .map((entry) => entry.article);
 
   const selected: NormalizedArticle[] = [];
   const sourceCounts = new Map<string, number>();
@@ -546,12 +644,13 @@ export async function generateDailyBriefing(input: GenerateBriefingInput): Promi
 
   const date = resolveRequestDate(input.date);
   const edition = input.edition ?? resolveBriefingEdition();
-  const selectedArticles = selectArticlesForGeneration(input.articles);
+  const selectedArticles = selectArticlesForGeneration(input.articles, input.priorBriefings ?? [], date);
   scopedLogger.info("Generating daily briefing.", {
     date,
     edition,
     articleCount: input.articles.length,
     selectedArticleCount: selectedArticles.length,
+    priorBriefingCount: input.priorBriefings?.length ?? 0,
   });
   const generatedContent = await requestGeneratedBriefing(selectedArticles, date, input.logContext);
   let briefing = applyBriefingIdentity(
