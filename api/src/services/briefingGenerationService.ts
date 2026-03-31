@@ -447,7 +447,14 @@ export async function generateDailyBriefing(input: GenerateBriefingInput): Promi
     scopedLogger.info("Applying Korean display-field localization pass to generated briefing.", {
       date,
     });
-    briefing = await localizeDisplayedFieldsForKoreanAudience(briefing, input.logContext);
+    try {
+      briefing = await localizeDisplayedFieldsForKoreanAudience(briefing, input.logContext);
+    } catch (error) {
+      scopedLogger.exception("Korean localization fallback failed; saving bilingual English-first briefing instead.", error, {
+        date,
+        stage: "localize-fields",
+      });
+    }
   }
 
   if (needsKoreanLocalization(briefing)) {
