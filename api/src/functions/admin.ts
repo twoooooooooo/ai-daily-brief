@@ -204,11 +204,23 @@ export async function runDailyBriefingHandler(
 
     const date = typeof payload.date === "string" ? payload.date : undefined;
     const overwrite = parseOptionalBoolean(payload.overwrite);
+    const compact = parseOptionalBoolean(payload.compact);
     const briefing = await runDailyBriefingPipeline({
       date,
       overwrite,
       logContext,
     });
+    if (compact) {
+      return jsonResponse({
+        briefingId: briefing.id,
+        date: briefing.date,
+        lastUpdatedAt: briefing.lastUpdatedAt,
+        issueCount: briefing.issues.length,
+        researchHighlightCount: briefing.researchHighlights.length,
+        trendingTopicCount: briefing.trendingTopics.length,
+      });
+    }
+
     return jsonResponse(briefing);
   });
 }

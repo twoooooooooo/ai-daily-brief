@@ -354,7 +354,9 @@ export async function fetchBriefingById(id: string): Promise<Briefing | null> {
 
 export async function runDailyBriefingGeneration(date?: string, adminApiKey?: string): Promise<Briefing> {
   const effectiveAdminApiKey = adminApiKey?.trim() || configuredAdminApiKey;
-  const requestBody: Record<string, string> = {};
+  const requestBody: Record<string, string | boolean> = {
+    compact: true,
+  };
 
   if (date) {
     requestBody.date = date;
@@ -364,12 +366,26 @@ export async function runDailyBriefingGeneration(date?: string, adminApiKey?: st
     requestBody.adminApiKey = effectiveAdminApiKey;
   }
 
-  return postJson<Briefing>(
+  const result = await postJson<{ briefingId?: string }>(
     endpoints.runDailyBriefing,
     requestBody,
     "일일 브리핑 생성에 실패했습니다.",
     effectiveAdminApiKey ? { "x-admin-key": effectiveAdminApiKey } : {},
   );
+
+  if (typeof result.briefingId === "string" && result.briefingId.trim()) {
+    const savedBriefing = await fetchBriefingById(result.briefingId);
+    if (savedBriefing) {
+      return savedBriefing;
+    }
+  }
+
+  const recentBriefings = await fetchArchiveBriefings();
+  if (recentBriefings.length > 0) {
+    return recentBriefings[0];
+  }
+
+  throw new BriefingServiceError("일일 브리핑 생성 후 저장된 결과를 다시 불러오지 못했습니다.");
 }
 
 // ─── Client-side article filtering ──────────────────────────────────────────
