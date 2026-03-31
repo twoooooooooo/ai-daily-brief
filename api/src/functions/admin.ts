@@ -24,14 +24,35 @@ function extractErrorMessage(error: unknown): string | null {
   return error.message;
 }
 
-function isAuthorizedAdminRequest(request: HttpRequest): boolean {
+function getProvidedAdminApiKey(request: HttpRequest, payload?: unknown): string | undefined {
+  const headerApiKey = request.headers.get("x-admin-key")?.trim();
+  if (headerApiKey) {
+    return headerApiKey;
+  }
+
+  const queryApiKey = request.query.get("adminKey")?.trim();
+  if (queryApiKey) {
+    return queryApiKey;
+  }
+
+  if (isRecord(payload)) {
+    const bodyApiKey = typeof payload.adminApiKey === "string" ? payload.adminApiKey.trim() : undefined;
+    if (bodyApiKey) {
+      return bodyApiKey;
+    }
+  }
+
+  return undefined;
+}
+
+function isAuthorizedAdminRequest(request: HttpRequest, payload?: unknown): boolean {
   const adminApiSettings = getAdminApiSettings();
   const configuredApiKey = adminApiSettings.apiKey;
   if (!configuredApiKey) {
     return !adminApiSettings.requireAuth;
   }
 
-  const providedApiKey = request.headers.get("x-admin-key")?.trim();
+  const providedApiKey = getProvidedAdminApiKey(request, payload);
   return providedApiKey === configuredApiKey;
 }
 
@@ -110,11 +131,6 @@ export async function generateBriefingHandler(
   context: InvocationContext,
 ): Promise<HttpResponseInit> {
   return handleAdminRequest(context, "generateBriefing", async (logContext) => {
-    if (!isAuthorizedAdminRequest(request)) {
-      logger.child(logContext).warn("Rejected unauthorized admin request.");
-      return unauthorizedResponse("Unauthorized admin operation.");
-    }
-
     let payload: unknown;
 
     try {
@@ -125,6 +141,11 @@ export async function generateBriefingHandler(
 
     if (!isRecord(payload)) {
       return badRequestResponse("Request body must be a JSON object.");
+    }
+
+    if (!isAuthorizedAdminRequest(request, payload)) {
+      logger.child(logContext).warn("Rejected unauthorized admin request.");
+      return unauthorizedResponse("Unauthorized admin operation.");
     }
 
     const articles = parseNormalizedArticles(payload.articles);
@@ -155,11 +176,6 @@ export async function runDailyBriefingHandler(
   context: InvocationContext,
 ): Promise<HttpResponseInit> {
   return handleAdminRequest(context, "runDailyBriefing", async (logContext) => {
-    if (!isAuthorizedAdminRequest(request)) {
-      logger.child(logContext).warn("Rejected unauthorized admin request.");
-      return unauthorizedResponse("Unauthorized admin operation.");
-    }
-
     let payload: unknown = {};
 
     try {
@@ -171,6 +187,11 @@ export async function runDailyBriefingHandler(
 
     if (!isRecord(payload)) {
       return badRequestResponse("Request body must be a JSON object.");
+    }
+
+    if (!isAuthorizedAdminRequest(request, payload)) {
+      logger.child(logContext).warn("Rejected unauthorized admin request.");
+      return unauthorizedResponse("Unauthorized admin operation.");
     }
 
     const date = typeof payload.date === "string" ? payload.date : undefined;

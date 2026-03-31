@@ -348,10 +348,19 @@ export async function fetchBriefingById(id: string): Promise<Briefing | null> {
 
 export async function runDailyBriefingGeneration(date?: string, adminApiKey?: string): Promise<Briefing> {
   const effectiveAdminApiKey = adminApiKey?.trim() || configuredAdminApiKey;
+  const requestBody: Record<string, string> = {};
+
+  if (date) {
+    requestBody.date = date;
+  }
+
+  if (effectiveAdminApiKey) {
+    requestBody.adminApiKey = effectiveAdminApiKey;
+  }
 
   return postJson<Briefing>(
     endpoints.runDailyBriefing,
-    date ? { date } : {},
+    requestBody,
     "일일 브리핑 생성에 실패했습니다.",
     effectiveAdminApiKey ? { "x-admin-key": effectiveAdminApiKey } : {},
   );
