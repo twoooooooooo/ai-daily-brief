@@ -1,7 +1,7 @@
 import { app, type HttpRequest, type HttpResponseInit, type InvocationContext } from "@azure/functions";
 import { badRequestResponse, internalErrorResponse, jsonResponse, unauthorizedResponse } from "../http/responses.js";
 import { getAdminApiSettings } from "../config/runtimeConfig.js";
-import { BriefingGenerationError, generateDailyBriefing } from "../services/briefingGenerationService.js";
+import { BriefingGenerationError, generateDailyBriefing, probeOpenAIConnection } from "../services/briefingGenerationService.js";
 import { DailyBriefingPipelineError, runDailyBriefingPipeline } from "../services/dailyBriefingPipeline.js";
 import { saveBriefingWithOptions } from "../services/briefingRepository.js";
 import { ingestConfiguredRssFeeds } from "../services/rssIngestionService.js";
@@ -205,6 +205,34 @@ export async function runDailyBriefingHandler(
   });
 }
 
+export async function probeOpenAIHandler(
+  request: HttpRequest,
+  context: InvocationContext,
+): Promise<HttpResponseInit> {
+  return handleAdminRequest(context, "probeOpenAI", async (logContext) => {
+    let payload: unknown = {};
+
+    try {
+      const rawBody = await request.text();
+      payload = rawBody.trim() ? JSON.parse(rawBody) : {};
+    } catch {
+      return badRequestResponse("Request body must be valid JSON.");
+    }
+
+    if (!isRecord(payload)) {
+      return badRequestResponse("Request body must be a JSON object.");
+    }
+
+    if (!isAuthorizedAdminRequest(request, payload)) {
+      logger.child(logContext).warn("Rejected unauthorized admin request.");
+      return unauthorizedResponse("Unauthorized admin operation.");
+    }
+
+    const result = await probeOpenAIConnection(logContext);
+    return jsonResponse(result);
+  });
+}
+
 app.http("ingestRss", {
   methods: ["POST"],
   authLevel: "anonymous",
@@ -224,4 +252,11 @@ app.http("runDailyBriefing", {
   authLevel: "anonymous",
   route: "ops/run-daily-briefing",
   handler: runDailyBriefingHandler,
+});
+
+app.http("probeOpenAI", {
+  methods: ["GET", "POST"],
+  authLevel: "anonymous",
+  route: "ops/probe-openai",
+  handler: probeOpenAIHandler,
 });

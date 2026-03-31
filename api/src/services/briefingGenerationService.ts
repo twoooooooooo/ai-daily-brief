@@ -205,6 +205,29 @@ function buildChatCompletionRequestBody(systemPrompt: string, userPrompt: string
   };
 }
 
+export async function probeOpenAIConnection(logContext: LogContext = {}): Promise<{
+  ok: true;
+  model: string;
+  baseUrl: string;
+  usesAzureApiKeyAuth: boolean;
+}> {
+  await requestOpenAIJson(
+    "You are a health check endpoint. Return a tiny JSON object.",
+    'Return exactly this JSON: {"ok":true}',
+    {
+      mode: "probe",
+    },
+    logContext,
+  );
+
+  return {
+    ok: true,
+    model: getOpenAIModel(),
+    baseUrl: getOpenAIBaseUrl(),
+    usesAzureApiKeyAuth: shouldUseAzureApiKeyAuth(),
+  };
+}
+
 async function requestOpenAIJson(
   systemPrompt: string,
   userPrompt: string,
