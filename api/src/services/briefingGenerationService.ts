@@ -137,6 +137,40 @@ function getOpenAIModel(): string {
   return getOpenAISettings().model;
 }
 
+function getOpenAIApiVersion(): string | undefined {
+  return getOpenAISettings().apiVersion;
+}
+
+function shouldUseAzureApiKeyAuth(): boolean {
+  return getOpenAISettings().useAzureApiKeyAuth;
+}
+
+function buildOpenAIRequestUrl(): string {
+  const baseUrl = getOpenAIBaseUrl().replace(/\/+$/, "");
+  const apiVersion = getOpenAIApiVersion();
+
+  if (!apiVersion) {
+    return `${baseUrl}/chat/completions`;
+  }
+
+  const separator = baseUrl.includes("?") ? "&" : "?";
+  return `${baseUrl}/chat/completions${separator}api-version=${encodeURIComponent(apiVersion)}`;
+}
+
+function buildOpenAIHeaders(): Record<string, string> {
+  if (shouldUseAzureApiKeyAuth()) {
+    return {
+      "Content-Type": "application/json",
+      "api-key": getOpenAIApiKey(),
+    };
+  }
+
+  return {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${getOpenAIApiKey()}`,
+  };
+}
+
 function selectArticlesForGeneration(articles: NormalizedArticle[]): NormalizedArticle[] {
   return [...articles]
     .sort((left, right) => right.publishedAt.localeCompare(left.publishedAt))
@@ -183,12 +217,9 @@ async function requestOpenAIJson(
   });
   const response = await withRetry(async () => {
     try {
-      return await fetch(`${getOpenAIBaseUrl().replace(/\/+$/, "")}/chat/completions`, {
+      return await fetch(buildOpenAIRequestUrl(), {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${getOpenAIApiKey()}`,
-        },
+        headers: buildOpenAIHeaders(),
         body: JSON.stringify(buildChatCompletionRequestBody(systemPrompt, userPrompt)),
       });
     } catch (error) {

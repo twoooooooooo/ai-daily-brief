@@ -2,6 +2,8 @@ export interface OpenAISettings {
   apiKey: string;
   baseUrl: string;
   model: string;
+  apiVersion?: string;
+  useAzureApiKeyAuth: boolean;
 }
 
 export interface BriefingStorageSettings {
@@ -50,6 +52,9 @@ export function getOpenAISettings(): OpenAISettings {
     apiKey: getRequiredSecret("OPENAI_API_KEY"),
     baseUrl: readEnv("OPENAI_BASE_URL") ?? DEFAULT_OPENAI_BASE_URL,
     model: readEnv("OPENAI_MODEL") ?? DEFAULT_OPENAI_MODEL,
+    apiVersion: readEnv("OPENAI_API_VERSION"),
+    useAzureApiKeyAuth: readEnv("OPENAI_USE_AZURE_API_KEY_AUTH") === "true"
+      || (readEnv("OPENAI_BASE_URL")?.includes(".openai.azure.com") ?? false),
   };
 }
 
