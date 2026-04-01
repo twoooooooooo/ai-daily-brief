@@ -1,8 +1,11 @@
 import { app, type HttpRequest, type HttpResponseInit, type InvocationContext } from "@azure/functions";
-import { getBriefingByDate, getBriefingById, getTodayBriefing, listRecentBriefings, searchBriefings } from "../services/briefingRepository.js";
+import { getBriefingByDate, getBriefingById, getLatestPersistedBriefing, getTodayBriefing, listRecentBriefings, searchBriefings } from "../services/briefingRepository.js";
 import { badRequestResponse, internalErrorResponse, jsonResponse, notFoundResponse } from "../http/responses.js";
-import type { BriefingResponse } from "../shared/contracts.js";
+import type { BriefingOperationalStatus, BriefingResponse } from "../shared/contracts.js";
 import type { ArticleType, BriefingEdition, Category, Importance, Region } from "../shared/contracts.js";
+import { getBriefingStoreStatus } from "../repositories/briefingStoreProvider.js";
+import { getDailyBriefingScheduleSettings } from "../config/runtimeConfig.js";
+import { getLatestDailyBriefingJob } from "../services/dailyBriefingJobService.js";
 
 async function handleRequest(
   context: InvocationContext,
@@ -130,6 +133,38 @@ export async function searchBriefingsHandler(
   });
 }
 
+export async function getOperationalStatusHandler(
+  _request: HttpRequest,
+  context: InvocationContext,
+): Promise<HttpResponseInit> {
+  return handleRequest(context, async () => {
+    const latestBriefing = await getLatestPersistedBriefing();
+    const latestJob = getLatestDailyBriefingJob();
+    const status: BriefingOperationalStatus = {
+      storage: getBriefingStoreStatus(),
+      schedule: getDailyBriefingScheduleSettings(),
+      latestBriefing: latestBriefing ? {
+        id: latestBriefing.id,
+        date: latestBriefing.date,
+        edition: latestBriefing.edition,
+        updatedAt: latestBriefing.lastUpdatedAt,
+        issueCount: latestBriefing.issues.length,
+        researchHighlightCount: latestBriefing.researchHighlights.length,
+      } : undefined,
+      latestJob: latestJob ? {
+        id: latestJob.id,
+        status: latestJob.status,
+        updatedAt: latestJob.updatedAt,
+        date: latestJob.date,
+        edition: latestJob.edition,
+        error: latestJob.error,
+      } : undefined,
+    };
+
+    return jsonResponse(status);
+  });
+}
+
 app.http("getTodayBriefing", {
   methods: ["GET"],
   authLevel: "anonymous",
@@ -163,4 +198,11 @@ app.http("searchBriefings", {
   authLevel: "anonymous",
   route: "search",
   handler: searchBriefingsHandler,
+});
+
+app.http("getOperationalStatus", {
+  methods: ["GET"],
+  authLevel: "anonymous",
+  route: "status",
+  handler: getOperationalStatusHandler,
 });

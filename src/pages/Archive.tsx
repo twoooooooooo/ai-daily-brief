@@ -20,6 +20,27 @@ const editionLabels: Record<"Morning" | "Afternoon", string> = {
   Afternoon: "오후 브리핑",
 };
 
+function groupBriefingsByDate(briefings: Briefing[]) {
+  const groups = new Map<string, Briefing[]>();
+
+  for (const briefing of briefings) {
+    const existing = groups.get(briefing.date) ?? [];
+    existing.push(briefing);
+    groups.set(briefing.date, existing);
+  }
+
+  return [...groups.entries()].map(([date, items]) => ({
+    date,
+    items: items.sort((left, right) => {
+      if (left.edition === right.edition) {
+        return 0;
+      }
+
+      return left.edition === "Afternoon" ? -1 : 1;
+    }),
+  }));
+}
+
 const Archive = () => {
   const {
     isLoading, isFetching, isError, error, briefings, filters,
@@ -29,6 +50,7 @@ const Archive = () => {
 
   const [dateFromOpen, setDateFromOpen] = useState(false);
   const [dateToOpen, setDateToOpen] = useState(false);
+  const groupedBriefings = groupBriefingsByDate(briefings);
 
   const chipBase = "inline-flex items-center rounded-full px-3 py-1.5 text-xs font-medium transition-all duration-200 cursor-pointer select-none";
   const chipActive = "bg-foreground text-background shadow-sm";
@@ -190,9 +212,25 @@ const Archive = () => {
             <p className="text-sm text-muted-foreground">검색 조건에 맞는 브리핑이 없습니다.</p>
           </div>
         ) : (
-          <div className="space-y-3">
-            {briefings.map((briefing, i) => (
-              <ArchiveBriefingCard key={briefing.id} briefing={briefing} index={i} />
+          <div className="space-y-8">
+            {groupedBriefings.map((group, groupIndex) => (
+              <section key={group.date}>
+                <div className="mb-3 flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-semibold text-foreground">
+                      {new Date(group.date).toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric", weekday: "short" })}
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
+                      {group.items.length}개 edition · {group.items.reduce((total, briefing) => total + briefing.issues.length + briefing.researchHighlights.length, 0)}개 선별 기사
+                    </p>
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  {group.items.map((briefing, itemIndex) => (
+                    <ArchiveBriefingCard key={briefing.id} briefing={briefing} index={(groupIndex * 4) + itemIndex} />
+                  ))}
+                </div>
+              </section>
             ))}
           </div>
         )}
@@ -215,6 +253,15 @@ const ArchiveBriefingCard = ({ briefing, index }: { briefing: Briefing; index: n
   const dateFormatted = dateObj.toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric", weekday: "short" });
   const totalIssues = briefing.issues.length + briefing.researchHighlights.length;
   const highCount = [...briefing.issues, ...briefing.researchHighlights].filter((a) => a.importance === "High").length;
+  const topSources = [...briefing.issues, ...briefing.researchHighlights]
+    .reduce<Map<string, number>>((counts, article) => {
+      counts.set(article.source, (counts.get(article.source) ?? 0) + 1);
+      return counts;
+    }, new Map())
+    .entries();
+  const sourceSummary = [...topSources]
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, 3);
 
   return (
     <motion.div
@@ -258,6 +305,16 @@ const ArchiveBriefingCard = ({ briefing, index }: { briefing: Briefing; index: n
               <p className="text-[13px] text-muted-foreground leading-relaxed mb-3 line-clamp-2">
                 {briefing.dailySummary.trend}
               </p>
+
+              {sourceSummary.length > 0 && (
+                <div className="mb-3 flex flex-wrap items-center gap-1.5">
+                  {sourceSummary.map(([source, count]) => (
+                    <span key={source} className="inline-flex items-center rounded-full border border-border bg-background px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                      {source} {count}
+                    </span>
+                  ))}
+                </div>
+              )}
 
               {/* Keywords */}
               <div className="flex flex-wrap gap-1.5">

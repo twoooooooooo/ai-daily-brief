@@ -24,6 +24,17 @@ interface GenerateBriefingInput {
 }
 
 const MAX_GENERATION_ARTICLES = 16;
+const TOPIC_CLUSTER_KEYWORDS: Record<string, string[]> = {
+  openai: ["openai", "gpt", "chatgpt", "sora"],
+  google: ["google", "gemini", "deepmind", "search live"],
+  anthropic: ["anthropic", "claude"],
+  meta: ["meta", "llama"],
+  microsoft: ["microsoft", "copilot", "azure ai"],
+  infrastructure: ["data center", "gpu", "chip", "semiconductor", "memory", "power"],
+  policy: ["policy", "regulation", "court", "senate", "law", "government"],
+  funding: ["funding", "raises", "investment", "ipo", "acquisition"],
+  voice: ["voice", "audio", "speech", "translation"],
+};
 
 interface OpenAIChatCompletionResponse {
   choices?: Array<{
@@ -193,6 +204,8 @@ function getSourcePriority(article: NormalizedArticle): number {
   if (source.includes("google")) return 3.2;
   if (source.includes("nvidia")) return 3.15;
   if (source.includes("meta")) return 3.05;
+  if (source.includes("aws")) return 3;
+  if (source.includes("hugging face")) return 3;
   if (source.includes("arxiv")) return 2.2;
   return 2;
 }
@@ -235,6 +248,17 @@ function getSignalPriority(article: NormalizedArticle): number {
   return signals.reduce((score, signal) => score + (text.includes(signal) ? 0.35 : 0), 0);
 }
 
+function detectTopicCluster(article: NormalizedArticle): string {
+  const text = normalizeText(`${article.title} ${article.summary} ${article.source}`);
+  for (const [cluster, keywords] of Object.entries(TOPIC_CLUSTER_KEYWORDS)) {
+    if (keywords.some((keyword) => text.includes(normalizeText(keyword)))) {
+      return cluster;
+    }
+  }
+
+  return `${article.category.toLowerCase()}-${article.type}`;
+}
+
 function normalizeText(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9가-힣]+/g, " ").replace(/\s+/g, " ").trim();
 }
@@ -247,6 +271,7 @@ interface PriorCoverage {
   recentUrls: Set<string>;
   recentTitles: Set<string>;
   recentKeywords: Set<string>;
+  recentTopicClusters: Set<string>;
 }
 
 function buildPriorCoverage(priorBriefings: Briefing[], date: string): PriorCoverage {
@@ -257,6 +282,7 @@ function buildPriorCoverage(priorBriefings: Briefing[], date: string): PriorCove
   const recentUrls = new Set<string>();
   const recentTitles = new Set<string>();
   const recentKeywords = new Set<string>();
+  const recentTopicClusters = new Set<string>();
 
   for (const briefing of priorBriefings) {
     const articles = [...briefing.issues, ...briefing.researchHighlights];
@@ -268,6 +294,21 @@ function buildPriorCoverage(priorBriefings: Briefing[], date: string): PriorCove
       recentUrls.add(article.sourceUrl);
       recentTitles.add(normalizedTitle);
       article.keywords.forEach((keyword) => recentKeywords.add(normalizeText(keyword)));
+      recentTopicClusters.add(detectTopicCluster({
+        id: article.id,
+        title: article.title,
+        source: article.source,
+        sourceUrl: article.sourceUrl,
+        publishedAt: `${article.date}T00:00:00.000Z`,
+        summary: article.summary,
+        content: article.summary,
+        type: article.type,
+        category: article.category,
+        region: article.region,
+        normalizedTitle: normalizeText(article.title),
+        feedId: article.source,
+        ingestedAt: `${article.date}T00:00:00.000Z`,
+      }));
 
       if (isSameDay) {
         hardExcludedIds.add(article.id);
@@ -285,6 +326,7 @@ function buildPriorCoverage(priorBriefings: Briefing[], date: string): PriorCove
     recentUrls,
     recentTitles,
     recentKeywords,
+    recentTopicClusters,
   };
 }
 
@@ -319,6 +361,10 @@ function getOverlapPenalty(article: NormalizedArticle, priorCoverage: PriorCover
     }
   }
 
+  if (priorCoverage.recentTopicClusters.has(detectTopicCluster(article))) {
+    penalty += 1.5;
+  }
+
   return penalty;
 }
 
@@ -347,6 +393,7 @@ function selectArticlesForGeneration(articles: NormalizedArticle[], priorBriefin
   const sourceCounts = new Map<string, number>();
   const categoryCounts = new Map<string, number>();
   const typeCounts = new Map<string, number>();
+  const clusterCounts = new Map<string, number>();
 
   for (const article of rankedArticles) {
     if (selected.length >= MAX_GENERATION_ARTICLES) {
@@ -356,6 +403,8 @@ function selectArticlesForGeneration(articles: NormalizedArticle[], priorBriefin
     const sourceCount = sourceCounts.get(article.source) ?? 0;
     const categoryCount = categoryCounts.get(article.category) ?? 0;
     const typeCount = typeCounts.get(article.type) ?? 0;
+    const cluster = detectTopicCluster(article);
+    const clusterCount = clusterCounts.get(cluster) ?? 0;
 
     if (sourceCount >= 4) {
       continue;
@@ -369,10 +418,15 @@ function selectArticlesForGeneration(articles: NormalizedArticle[], priorBriefin
       continue;
     }
 
+    if (clusterCount >= 2) {
+      continue;
+    }
+
     selected.push(article);
     sourceCounts.set(article.source, sourceCount + 1);
     categoryCounts.set(article.category, categoryCount + 1);
     typeCounts.set(article.type, typeCount + 1);
+    clusterCounts.set(cluster, clusterCount + 1);
   }
 
   if (selected.length < Math.min(MAX_GENERATION_ARTICLES, rankedArticles.length)) {
@@ -647,13 +701,18 @@ export async function generateDailyBriefing(input: GenerateBriefingInput): Promi
 
   const date = resolveRequestDate(input.date);
   const edition = input.edition ?? resolveBriefingEdition();
+  const startedAt = Date.now();
   const selectedArticles = selectArticlesForGeneration(input.articles, input.priorBriefings ?? [], date);
+  const selectedSources = [...new Set(selectedArticles.map((article) => article.source))];
+  const selectedClusters = [...new Set(selectedArticles.map((article) => detectTopicCluster(article)))];
   scopedLogger.info("Generating daily briefing.", {
     date,
     edition,
     articleCount: input.articles.length,
     selectedArticleCount: selectedArticles.length,
     priorBriefingCount: input.priorBriefings?.length ?? 0,
+    selectedSources,
+    selectedClusters,
   });
   const generatedContent = await requestGeneratedBriefing(selectedArticles, date, input.logContext);
   let briefing = applyBriefingIdentity(
@@ -691,6 +750,7 @@ export async function generateDailyBriefing(input: GenerateBriefingInput): Promi
     issues: briefing.issues.length,
     researchHighlights: briefing.researchHighlights.length,
     trendingTopics: briefing.trendingTopics.length,
+    durationMs: Date.now() - startedAt,
   });
 
   return briefing;

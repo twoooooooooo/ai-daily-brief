@@ -313,3 +313,8 @@ export async function getBriefingByDate(date: string): Promise<Briefing | null> 
   const briefing = fromStoredBundle(stored);
   return isProbeBriefing(briefing) ? null : briefing;
 }
+
+export async function getLatestPersistedBriefing(): Promise<Briefing | null> {
+  const [latest] = await listRecentBriefings(1);
+  return latest ?? null;
+}

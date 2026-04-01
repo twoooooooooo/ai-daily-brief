@@ -60,6 +60,37 @@ export interface BriefingResponse {
   lastUpdatedAt?: string;
 }
 
+export interface BriefingOperationalStatus {
+  storage: {
+    provider: "blob" | "file";
+    details: Record<string, unknown>;
+  };
+  schedule: {
+    enabled: boolean;
+    timezone: string;
+    runs: Array<{
+      edition: BriefingEdition;
+      cron: string;
+    }>;
+  };
+  latestBriefing?: {
+    id: string;
+    date: string;
+    edition: BriefingEdition;
+    updatedAt?: string;
+    issueCount: number;
+    researchHighlightCount: number;
+  };
+  latestJob?: {
+    id: string;
+    status: "queued" | "running" | "completed" | "failed";
+    updatedAt: string;
+    date?: string;
+    edition?: BriefingEdition;
+    error?: string;
+  };
+}
+
 export type DailyBriefingJobStatus = "queued" | "running" | "completed" | "failed";
 
 export interface DailyBriefingJob {

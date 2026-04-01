@@ -26,6 +26,7 @@ const logger = createLogger("daily-briefing-pipeline");
 export async function runDailyBriefingPipeline(
   input: RunDailyBriefingPipelineInput = {},
 ): Promise<Briefing> {
+  const startedAt = Date.now();
   const targetDate = input.date ?? resolveBriefingDate();
   const targetEdition = input.edition ?? resolveBriefingEdition();
   const correlationId = input.logContext?.correlationId ?? createCorrelationId("briefing");
@@ -57,11 +58,13 @@ export async function runDailyBriefingPipeline(
     scopedLogger.info("Skipping RSS ingestion and using cached RSS articles for daily briefing pipeline.", {
       date: targetDate,
       cachedArticleCount: cachedArticles.length,
+      rssStage: "cache",
     });
   } else if (cachedArticles.length > 0) {
     scopedLogger.info("Using cached RSS articles for daily briefing pipeline.", {
       date: targetDate,
       cachedArticleCount: cachedArticles.length,
+      rssStage: "cache",
     });
   } else {
     let ingestionResult;
@@ -81,6 +84,13 @@ export async function runDailyBriefingPipeline(
     }
 
     articles = ingestionResult.articles;
+    scopedLogger.info("Completed RSS ingestion for daily briefing pipeline.", {
+      date: targetDate,
+      feedCount: ingestionResult.feedsProcessed,
+      uniqueArticles: ingestionResult.uniqueArticles,
+      discoveredArticles: ingestionResult.articlesDiscovered,
+      rssStage: "network",
+    });
   }
 
   let briefing: Briefing;
@@ -124,6 +134,7 @@ export async function runDailyBriefingPipeline(
       edition: savedBriefing.edition,
       briefingId: savedBriefing.id,
       articleCount: savedBriefing.issues.length + savedBriefing.researchHighlights.length,
+      durationMs: Date.now() - startedAt,
     });
     return savedBriefing;
   } catch (error) {

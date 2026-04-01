@@ -42,6 +42,9 @@ const Header = () => {
                     {editionLabel}
                   </span>
                 </div>
+                <p className="hidden sm:block text-[11px] text-muted-foreground mt-0.5">
+                  Curated global signals across AI products, policy, infrastructure, markets, and research
+                </p>
               </div>
             </Link>
           </div>

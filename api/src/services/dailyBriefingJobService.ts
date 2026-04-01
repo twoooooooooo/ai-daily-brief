@@ -120,3 +120,8 @@ export function startDailyBriefingJob(input: StartDailyBriefingJobInput = {}): D
 export function getDailyBriefingJob(jobId: string): DailyBriefingJobRecord | null {
   return jobs.get(jobId) ?? null;
 }
+
+export function getLatestDailyBriefingJob(): DailyBriefingJobRecord | null {
+  const sorted = [...jobs.values()].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+  return sorted[0] ?? null;
+}
