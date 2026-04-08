@@ -64,6 +64,11 @@ export interface BriefingOperationalStatus {
     provider: "blob" | "file";
     details: Record<string, unknown>;
   };
+  email: {
+    enabled: boolean;
+    recipientCount: number;
+    senderConfigured: boolean;
+  };
   schedule: {
     enabled: boolean;
     timezone: string;

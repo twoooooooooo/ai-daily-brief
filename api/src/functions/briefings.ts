@@ -4,7 +4,7 @@ import { badRequestResponse, internalErrorResponse, jsonResponse, notFoundRespon
 import type { BriefingOperationalStatus, BriefingResponse } from "../shared/contracts.js";
 import type { ArticleType, BriefingEdition, Category, Importance, Region } from "../shared/contracts.js";
 import { getBriefingStoreStatus } from "../repositories/briefingStoreProvider.js";
-import { getDailyBriefingScheduleSettings } from "../config/runtimeConfig.js";
+import { getBriefingEmailSettings, getDailyBriefingScheduleSettings } from "../config/runtimeConfig.js";
 import { getLatestDailyBriefingJob } from "../services/dailyBriefingJobService.js";
 
 async function handleRequest(
@@ -140,8 +140,14 @@ export async function getOperationalStatusHandler(
   return handleRequest(context, async () => {
     const latestBriefing = await getLatestPersistedBriefing();
     const latestJob = getLatestDailyBriefingJob();
+    const emailSettings = getBriefingEmailSettings();
     const status: BriefingOperationalStatus = {
       storage: getBriefingStoreStatus(),
+      email: {
+        enabled: emailSettings.enabled,
+        recipientCount: emailSettings.recipients.length,
+        senderConfigured: Boolean(emailSettings.senderAddress),
+      },
       schedule: getDailyBriefingScheduleSettings(),
       latestBriefing: latestBriefing ? {
         id: latestBriefing.id,

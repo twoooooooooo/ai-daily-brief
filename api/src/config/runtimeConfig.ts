@@ -39,6 +39,14 @@ export interface EnvironmentSettings {
   isProduction: boolean;
 }
 
+export interface BriefingEmailSettings {
+  enabled: boolean;
+  connectionString?: string;
+  senderAddress?: string;
+  recipients: string[];
+  subjectPrefix: string;
+}
+
 const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
 const DEFAULT_OPENAI_MODEL = "gpt-4.1-mini";
 const DEFAULT_DAILY_BRIEFING_SCHEDULE = "0 0 6 * * *";
@@ -117,6 +125,21 @@ export function getAdminProbeSettings(): AdminProbeSettings {
   const environment = getEnvironmentSettings();
   return {
     enabled: !environment.isProduction || readEnv("ENABLE_ADMIN_PROBES") === "true",
+  };
+}
+
+export function getBriefingEmailSettings(): BriefingEmailSettings {
+  const recipients = (readEnv("BRIEFING_EMAIL_RECIPIENTS") ?? "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  return {
+    enabled: readEnv("BRIEFING_EMAIL_ENABLED") === "true",
+    connectionString: readEnv("BRIEFING_EMAIL_CONNECTION_STRING"),
+    senderAddress: readEnv("BRIEFING_EMAIL_SENDER"),
+    recipients,
+    subjectPrefix: readEnv("BRIEFING_EMAIL_SUBJECT_PREFIX") ?? "[Global AI Daily Brief]",
   };
 }
 

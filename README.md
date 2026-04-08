@@ -63,6 +63,15 @@ For the Functions app, configure these in Azure:
 - `REQUIRE_ADMIN_API_AUTH`
 - `DAILY_BRIEFING_SCHEDULE`
 - `ENABLE_SCHEDULED_BRIEFING`
+- `BRIEFING_STORAGE_PROVIDER`
+- `BRIEFING_STORAGE_CONNECTION_STRING`
+- `BRIEFING_STORAGE_CONTAINER`
+- `BRIEFING_STORAGE_BLOB_NAME`
+- `BRIEFING_EMAIL_ENABLED`
+- `BRIEFING_EMAIL_CONNECTION_STRING`
+- `BRIEFING_EMAIL_SENDER`
+- `BRIEFING_EMAIL_RECIPIENTS`
+- `BRIEFING_EMAIL_SUBJECT_PREFIX`
 - `BRIEFING_STORAGE_FILE` only if you intentionally want a custom filesystem path
 - Future database secrets should also be stored as app settings or Key Vault references, not in source code
 

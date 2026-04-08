@@ -19,6 +19,11 @@
     "BRIEFING_STORAGE_FILE": ".data/briefings.json",
     "BRIEFING_STORAGE_CONTAINER": "briefings",
     "BRIEFING_STORAGE_BLOB_NAME": "briefings.json",
-    "BRIEFING_STORAGE_FALLBACK_TO_MEMORY": "true"
+    "BRIEFING_STORAGE_FALLBACK_TO_MEMORY": "true",
+    "BRIEFING_EMAIL_ENABLED": "false",
+    "BRIEFING_EMAIL_CONNECTION_STRING": "endpoint=https://your-resource.communication.azure.com/;accesskey=your-access-key",
+    "BRIEFING_EMAIL_SENDER": "DoNotReply@your-resource.azurecomm.net",
+    "BRIEFING_EMAIL_RECIPIENTS": "you@example.com",
+    "BRIEFING_EMAIL_SUBJECT_PREFIX": "[Global AI Daily Brief]"
   }
 }
