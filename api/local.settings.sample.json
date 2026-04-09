@@ -24,6 +24,8 @@
     "BRIEFING_EMAIL_CONNECTION_STRING": "endpoint=https://your-resource.communication.azure.com/;accesskey=your-access-key",
     "BRIEFING_EMAIL_SENDER": "DoNotReply@your-resource.azurecomm.net",
     "BRIEFING_EMAIL_RECIPIENTS": "you@example.com",
-    "BRIEFING_EMAIL_SUBJECT_PREFIX": "[Global AI Daily Brief]"
+    "BRIEFING_EMAIL_SUBJECT_PREFIX": "[Global AI Daily Brief]",
+    "MORNING_EMAIL_SCHEDULE": "0 0 8 * * *",
+    "AFTERNOON_EMAIL_SCHEDULE": "0 50 12 * * *"
   }
 }

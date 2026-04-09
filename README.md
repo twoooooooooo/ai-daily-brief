@@ -72,6 +72,8 @@ For the Functions app, configure these in Azure:
 - `BRIEFING_EMAIL_SENDER`
 - `BRIEFING_EMAIL_RECIPIENTS`
 - `BRIEFING_EMAIL_SUBJECT_PREFIX`
+- `MORNING_EMAIL_SCHEDULE`
+- `AFTERNOON_EMAIL_SCHEDULE`
 - `BRIEFING_STORAGE_FILE` only if you intentionally want a custom filesystem path
 - Future database secrets should also be stored as app settings or Key Vault references, not in source code
 

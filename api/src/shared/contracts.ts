@@ -68,6 +68,10 @@ export interface BriefingOperationalStatus {
     enabled: boolean;
     recipientCount: number;
     senderConfigured: boolean;
+    runs: Array<{
+      edition: BriefingEdition;
+      cron: string;
+    }>;
   };
   schedule: {
     enabled: boolean;

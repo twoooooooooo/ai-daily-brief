@@ -51,6 +51,8 @@ Optional:
 - `BRIEFING_EMAIL_SENDER`
 - `BRIEFING_EMAIL_RECIPIENTS`
 - `BRIEFING_EMAIL_SUBJECT_PREFIX`
+- `MORNING_EMAIL_SCHEDULE`
+- `AFTERNOON_EMAIL_SCHEDULE`
 - Any future database connection string such as `DATABASE_CONNECTION_STRING`
 
 If `OPENAI_BASE_URL` ends with `/openai/v1`, the backend treats it as the Azure/OpenAI v1 endpoint and does not append `api-version` to the request URL, even if `OPENAI_API_VERSION` is set.

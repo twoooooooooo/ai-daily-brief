@@ -45,12 +45,15 @@ export interface BriefingEmailSettings {
   senderAddress?: string;
   recipients: string[];
   subjectPrefix: string;
+  runs: ScheduledBriefingRunSettings[];
 }
 
 const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
 const DEFAULT_OPENAI_MODEL = "gpt-4.1-mini";
 const DEFAULT_DAILY_BRIEFING_SCHEDULE = "0 0 6 * * *";
 const DEFAULT_AFTERNOON_BRIEFING_SCHEDULE = "0 0 14 * * *";
+const DEFAULT_MORNING_EMAIL_SCHEDULE = "0 0 8 * * *";
+const DEFAULT_AFTERNOON_EMAIL_SCHEDULE = "0 50 12 * * *";
 
 function readEnv(name: string): string | undefined {
   const value = process.env[name]?.trim();
@@ -133,6 +136,8 @@ export function getBriefingEmailSettings(): BriefingEmailSettings {
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
+  const morningEmailSchedule = readEnv("MORNING_EMAIL_SCHEDULE") ?? DEFAULT_MORNING_EMAIL_SCHEDULE;
+  const afternoonEmailSchedule = readEnv("AFTERNOON_EMAIL_SCHEDULE") ?? DEFAULT_AFTERNOON_EMAIL_SCHEDULE;
 
   return {
     enabled: readEnv("BRIEFING_EMAIL_ENABLED") === "true",
@@ -140,6 +145,10 @@ export function getBriefingEmailSettings(): BriefingEmailSettings {
     senderAddress: readEnv("BRIEFING_EMAIL_SENDER"),
     recipients,
     subjectPrefix: readEnv("BRIEFING_EMAIL_SUBJECT_PREFIX") ?? "[Global AI Daily Brief]",
+    runs: [
+      { edition: "Morning", cron: morningEmailSchedule },
+      { edition: "Afternoon", cron: afternoonEmailSchedule },
+    ],
   };
 }
 

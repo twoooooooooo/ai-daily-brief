@@ -314,6 +314,22 @@ export async function getBriefingByDate(date: string): Promise<Briefing | null> 
   return isProbeBriefing(briefing) ? null : briefing;
 }
 
+export async function getBriefingByDateAndEdition(date: string, edition: BriefingEdition): Promise<Briefing | null> {
+  const normalizedDate = normalizeDate(date);
+  const stored = await briefingStore.getBriefingByDateAndEdition(normalizedDate, edition);
+  if (!stored) {
+    return null;
+  }
+
+  const briefing = fromStoredBundle(stored);
+  return isProbeBriefing(briefing) ? null : briefing;
+}
+
+export async function getLatestBriefingForEdition(edition: BriefingEdition, limit = 30): Promise<Briefing | null> {
+  const briefings = await listRecentBriefings(limit);
+  return briefings.find((briefing) => briefing.edition === edition) ?? null;
+}
+
 export async function getLatestPersistedBriefing(): Promise<Briefing | null> {
   const [latest] = await listRecentBriefings(1);
   return latest ?? null;

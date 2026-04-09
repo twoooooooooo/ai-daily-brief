@@ -2,7 +2,6 @@ import type { Briefing, BriefingEdition } from "../shared/contracts.js";
 import { createCorrelationId, createLogger, type LogContext } from "../utils/logger.js";
 import { resolveBriefingDate, resolveBriefingEdition } from "../utils/briefingEdition.js";
 import { listRecentBriefings, saveBriefingWithOptions } from "./briefingRepository.js";
-import { sendBriefingEmail } from "./briefingEmailService.js";
 import { generateDailyBriefing } from "./briefingGenerationService.js";
 import { listStoredRssArticles } from "./rssArticleStore.js";
 import { ingestConfiguredRssFeeds } from "./rssIngestionService.js";
@@ -130,21 +129,6 @@ export async function runDailyBriefingPipeline(
         correlationId,
       },
     });
-
-    try {
-      await sendBriefingEmail(savedBriefing, {
-        ...input.logContext,
-        component: "briefing-email",
-        operationName: "sendBriefingEmail",
-        correlationId,
-      });
-    } catch (error) {
-      scopedLogger.exception("Briefing email delivery failed after persistence.", error, {
-        stage: "email",
-        date: targetDate,
-        briefingId: savedBriefing.id,
-      });
-    }
 
     scopedLogger.info("Completed daily briefing pipeline.", {
       date: savedBriefing.date,
