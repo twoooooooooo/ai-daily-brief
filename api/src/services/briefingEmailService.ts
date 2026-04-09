@@ -128,13 +128,12 @@ export async function sendBriefingEmail(
 
   const client = new EmailClient(settings.connectionString);
   const poller = await client.beginSend({
-    senderAddress: settings.senderName?.trim()
-      ? `${settings.senderName.trim()} <${settings.senderAddress}>`
-      : settings.senderAddress,
+    // Azure Communication Services validates senderAddress as a plain email address.
+    senderAddress: settings.senderAddress,
     content: {
       subject: buildSubject(briefing, settings.subjectPrefix),
       plainText: buildPlainTextBody(briefing, settings.siteUrl),
-        html: buildHtmlBody(briefing, settings.siteUrl),
+      html: buildHtmlBody(briefing, settings.siteUrl),
     },
     recipients: {
       to: recipientAddresses.map((address) => ({ address })),
