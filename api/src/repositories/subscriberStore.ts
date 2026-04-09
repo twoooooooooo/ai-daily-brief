@@ -11,6 +11,19 @@ export interface SubscriberRecord {
   source: "website";
 }
 
+export type SubscriberUpsertAction =
+  | "created"
+  | "reactivated"
+  | "already-active"
+  | "deactivated"
+  | "already-unsubscribed"
+  | "not-found";
+
+export interface SubscriberUpsertResult {
+  action: SubscriberUpsertAction;
+  subscriber: SubscriberRecord | null;
+}
+
 interface PersistedSubscriberFile {
   subscribers: SubscriberRecord[];
 }
@@ -104,17 +117,37 @@ async function saveStore(store: PersistedSubscriberFile): Promise<void> {
   await saveFileStore(store);
 }
 
-export async function upsertSubscriber(email: string, status: SubscriberRecord["status"]): Promise<SubscriberRecord> {
+export async function upsertSubscriber(
+  email: string,
+  status: SubscriberRecord["status"],
+): Promise<SubscriberUpsertResult> {
   const store = await loadStore();
   const normalizedEmail = email.trim().toLowerCase();
   const now = new Date().toISOString();
   const existing = store.subscribers.find((subscriber) => subscriber.email === normalizedEmail);
 
   if (existing) {
+    if (existing.status === status) {
+      return {
+        action: status === "active" ? "already-active" : "already-unsubscribed",
+        subscriber: cloneRecord(existing),
+      };
+    }
+
     existing.status = status;
     existing.updatedAt = now;
     await saveStore(store);
-    return cloneRecord(existing);
+    return {
+      action: status === "active" ? "reactivated" : "deactivated",
+      subscriber: cloneRecord(existing),
+    };
+  }
+
+  if (status === "unsubscribed") {
+    return {
+      action: "not-found",
+      subscriber: null,
+    };
   }
 
   const nextRecord: SubscriberRecord = {
@@ -126,7 +159,10 @@ export async function upsertSubscriber(email: string, status: SubscriberRecord["
   };
   store.subscribers.push(nextRecord);
   await saveStore(store);
-  return cloneRecord(nextRecord);
+  return {
+    action: "created",
+    subscriber: cloneRecord(nextRecord),
+  };
 }
 
 export async function listActiveSubscribers(): Promise<SubscriberRecord[]> {

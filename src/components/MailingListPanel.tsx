@@ -85,6 +85,10 @@ const MailingListPanel = () => {
               </Button>
             </div>
 
+            <p className="mt-3 text-xs leading-6 text-muted-foreground">
+              같은 이메일을 다시 등록하면 중복으로 쌓이지 않고 기존 구독 상태만 갱신됩니다.
+            </p>
+
             {status && !error && (
               <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
                 {status}

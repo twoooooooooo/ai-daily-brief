@@ -1,6 +1,6 @@
 import { app, type HttpRequest, type HttpResponseInit, type InvocationContext } from "@azure/functions";
 import { badRequestResponse, internalErrorResponse, jsonResponse } from "../http/responses.js";
-import { upsertSubscriber } from "../repositories/subscriberStore.js";
+import { upsertSubscriber, type SubscriberUpsertAction } from "../repositories/subscriberStore.js";
 
 function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim().toLowerCase());
@@ -24,7 +24,6 @@ async function handleSubscriptionAction(
   request: HttpRequest,
   context: InvocationContext,
   status: "active" | "unsubscribed",
-  successMessage: string,
 ): Promise<HttpResponseInit> {
   try {
     const payload = await parsePayload(request);
@@ -37,13 +36,16 @@ async function handleSubscriptionAction(
       return badRequestResponse("A valid email address is required.");
     }
 
-    const subscriber = await upsertSubscriber(email, status);
+    const result = await upsertSubscriber(email, status);
+    const message = getSubscriptionMessage(status, result.action);
     return jsonResponse({
-      message: successMessage,
-      subscriber: {
-        email: subscriber.email,
-        status: subscriber.status,
-      },
+      message,
+      subscriber: result.subscriber
+        ? {
+            email: result.subscriber.email,
+            status: result.subscriber.status,
+          }
+        : null,
     });
   } catch (error) {
     context.error("Subscription request failed", error);
@@ -51,18 +53,47 @@ async function handleSubscriptionAction(
   }
 }
 
+function getSubscriptionMessage(
+  status: "active" | "unsubscribed",
+  action: SubscriberUpsertAction,
+): string {
+  if (status === "active") {
+    switch (action) {
+      case "created":
+        return "메일링 리스트에 등록되었습니다.";
+      case "reactivated":
+        return "메일링 리스트 구독이 다시 활성화되었습니다.";
+      case "already-active":
+        return "이미 구독 중인 이메일입니다.";
+      default:
+        return "메일링 리스트에 등록되었습니다.";
+    }
+  }
+
+  switch (action) {
+    case "deactivated":
+      return "메일링 리스트에서 해지되었습니다.";
+    case "already-unsubscribed":
+      return "이미 구독 취소된 이메일입니다.";
+    case "not-found":
+      return "등록되지 않은 이메일입니다.";
+    default:
+      return "메일링 리스트에서 해지되었습니다.";
+  }
+}
+
 export async function subscribeHandler(
   request: HttpRequest,
   context: InvocationContext,
 ): Promise<HttpResponseInit> {
-  return handleSubscriptionAction(request, context, "active", "메일링 리스트에 등록되었습니다.");
+  return handleSubscriptionAction(request, context, "active");
 }
 
 export async function unsubscribeHandler(
   request: HttpRequest,
   context: InvocationContext,
 ): Promise<HttpResponseInit> {
-  return handleSubscriptionAction(request, context, "unsubscribed", "메일링 리스트에서 해지되었습니다.");
+  return handleSubscriptionAction(request, context, "unsubscribed");
 }
 
 app.http("subscribeBriefingMailingList", {

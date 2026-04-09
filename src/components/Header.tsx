@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import type { MouseEvent } from "react";
 
 const Header = () => {
   const [isDark, setIsDark] = useState(() =>
@@ -22,13 +23,20 @@ const Header = () => {
     { path: "/archive", label: "아카이브" },
   ];
 
+  const handleHomeBrandClick = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (location.pathname === "/") {
+      event.preventDefault();
+      window.location.reload();
+    }
+  };
+
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-card/80 backdrop-blur-xl">
       <div className="mx-auto max-w-7xl px-4 py-3.5 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between gap-4">
           {/* Logo + edition */}
           <div className="flex items-center gap-3">
-            <Link to="/" className="flex items-center gap-3">
+            <Link to="/" onClick={handleHomeBrandClick} className="flex items-center gap-3">
               <div className="flex h-9 w-9 items-center justify-center rounded-lg gradient-hero">
                 <Zap className="h-4.5 w-4.5 text-primary-foreground" />
               </div>

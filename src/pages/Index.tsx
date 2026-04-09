@@ -77,8 +77,6 @@ const Index = () => {
         />
       )}
 
-      <MailingListPanel />
-
       {/* Search + filters */}
       <div className="mx-auto max-w-7xl px-4 pt-5 sm:px-6 lg:px-8">
         <div className="flex items-center gap-2.5 mb-4">
@@ -152,6 +150,8 @@ const Index = () => {
           </>
         )}
       </main>
+
+      <MailingListPanel />
 
       <DetailModal article={selectedArticle} onClose={() => setSelectedArticle(null)} />
     </div>
