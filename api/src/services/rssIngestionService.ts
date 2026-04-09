@@ -237,6 +237,51 @@ function parseAnthropicNewsroom(feed: RssFeedConfig, html: string): NormalizedAr
   return [...articles.values()].sort((left, right) => right.publishedAt.localeCompare(left.publishedAt));
 }
 
+function parseMistralNewsroom(feed: RssFeedConfig, html: string): NormalizedArticle[] {
+  const itemPattern = /<a class="group" href="(?<path>\/news\/[a-z0-9-]+)"><article[\s\S]*?<h1[^>]*>(?<title>[^<]+)<\/h1>[\s\S]*?<p[^>]*>(?<summary>[\s\S]*?)<\/p>[\s\S]*?text-sm flex items-center h-full px-3 text-mistral-black-tint">(?<date>[^<]+)<\/div>/g;
+  const articles = new Map<string, NormalizedArticle>();
+
+  for (const match of html.matchAll(itemPattern)) {
+    const path = match.groups?.path?.trim() ?? "";
+    const rawTitle = decodeHtmlEntities(match.groups?.title ?? "");
+    const rawSummary = decodeHtmlEntities(match.groups?.summary ?? "");
+    const rawDate = decodeHtmlEntities(match.groups?.date ?? "");
+
+    if (!path || !rawTitle || !rawSummary || !rawDate) {
+      continue;
+    }
+
+    const parsedDate = new Date(rawDate);
+    const publishedAt = Number.isNaN(parsedDate.getTime())
+      ? new Date().toISOString()
+      : parsedDate.toISOString();
+    const title = normalizeWhitespace(rawTitle);
+    const summary = normalizeWhitespace(rawSummary);
+    const sourceUrl = `https://mistral.ai${path}`;
+
+    const article: NormalizedArticle = {
+      id: buildArticleId(feed, title, publishedAt),
+      title,
+      source: feed.source,
+      sourceUrl,
+      publishedAt,
+      summary,
+      content: summary,
+      type: feed.kind,
+      category: feed.category,
+      region: feed.region,
+      layer: feed.layer ?? (feed.kind === "research" ? "research" : "general-news"),
+      normalizedTitle: normalizeTitle(title),
+      feedId: feed.id,
+      ingestedAt: new Date().toISOString(),
+    };
+
+    articles.set(createArticleStoreKey(article), article);
+  }
+
+  return [...articles.values()].sort((left, right) => right.publishedAt.localeCompare(left.publishedAt));
+}
+
 async function ingestFeed(feed: RssFeedConfig): Promise<NormalizedArticle[]> {
   logger.info("Starting RSS feed ingestion.", { feedId: feed.id, url: feed.url });
   const body = await fetchFeedXml(feed);
@@ -244,6 +289,15 @@ async function ingestFeed(feed: RssFeedConfig): Promise<NormalizedArticle[]> {
   if (feed.format === "anthropic-newsroom") {
     const normalizedArticles = parseAnthropicNewsroom(feed, body);
     logger.info("Completed Anthropic newsroom ingestion.", {
+      feedId: feed.id,
+      discoveredArticles: normalizedArticles.length,
+    });
+    return normalizedArticles;
+  }
+
+  if (feed.format === "mistral-newsroom") {
+    const normalizedArticles = parseMistralNewsroom(feed, body);
+    logger.info("Completed Mistral newsroom ingestion.", {
       feedId: feed.id,
       discoveredArticles: normalizedArticles.length,
     });
