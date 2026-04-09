@@ -1,5 +1,5 @@
 import type { Briefing, BriefingEdition } from "../shared/contracts.js";
-import type { NormalizedArticle } from "../shared/rss.js";
+import type { FeedLayer, NormalizedArticle } from "../shared/rss.js";
 import {
   DAILY_BRIEFING_FIELD_LOCALIZATION_SYSTEM_PROMPT,
   DAILY_BRIEFING_LOCALIZATION_SYSTEM_PROMPT,
@@ -24,6 +24,14 @@ interface GenerateBriefingInput {
 }
 
 const MAX_GENERATION_ARTICLES = 16;
+const PRIORITY_SIGNAL_KEYWORDS = [
+  "launch", "released", "release", "announced", "announcement", "introducing", "funding", "raises",
+  "acquire", "acquisition", "partnership", "policy", "regulation", "senate", "court", "ipo",
+  "investment", "shutdown", "expands", "available", "rollout", "global", "enterprise", "subscription",
+  "benchmark", "reasoning", "agent", "agents", "agentic", "developer", "api", "security",
+  "chip", "gpu", "semiconductor", "inference", "training", "data center", "compute", "workload",
+  "search", "assistant", "coding", "open source", "governance",
+] as const;
 const TOPIC_CLUSTER_KEYWORDS: Record<string, string[]> = {
   openai: ["openai", "gpt", "chatgpt", "sora"],
   google: ["google", "gemini", "deepmind", "search live"],
@@ -198,7 +206,9 @@ function buildOpenAIHeaders(): Record<string, string> {
 function getSourcePriority(article: NormalizedArticle): number {
   const source = article.source.toLowerCase();
 
+  if (source.includes("anthropic")) return 3.45;
   if (source.includes("techcrunch")) return 3.5;
+  if (source.includes("wired")) return 3.35;
   if (source.includes("openai")) return 3.4;
   if (source.includes("microsoft")) return 3.3;
   if (source.includes("google")) return 3.2;
@@ -208,6 +218,21 @@ function getSourcePriority(article: NormalizedArticle): number {
   if (source.includes("hugging face")) return 3;
   if (source.includes("arxiv")) return 2.2;
   return 2;
+}
+
+function getLayerPriority(article: NormalizedArticle): number {
+  switch (article.layer) {
+    case "official":
+      return 1.3;
+    case "specialist-news":
+      return 1.15;
+    case "general-news":
+      return 1;
+    case "research":
+      return 0.9;
+    default:
+      return 0.8;
+  }
 }
 
 function getCategoryPriority(article: NormalizedArticle): number {
@@ -239,13 +264,30 @@ function getRecencyPriority(article: NormalizedArticle): number {
 
 function getSignalPriority(article: NormalizedArticle): number {
   const text = `${article.title} ${article.summary}`.toLowerCase();
-  const signals = [
-    "launch", "released", "release", "funding", "raises", "acquire", "acquisition", "partnership",
-    "policy", "regulation", "senate", "court", "ipo", "investment", "shutdown", "expands",
-    "available", "rollout", "global", "enterprise", "subscription",
-  ];
+  return PRIORITY_SIGNAL_KEYWORDS.reduce((score, signal) => score + (text.includes(signal) ? 0.28 : 0), 0);
+}
 
-  return signals.reduce((score, signal) => score + (text.includes(signal) ? 0.35 : 0), 0);
+function getMultiSourceValidationPriority(article: NormalizedArticle, articles: NormalizedArticle[]): number {
+  const normalizedTitle = normalizeText(article.title);
+  const titleTokens = normalizedTitle.split(" ").filter((token) => token.length >= 4);
+
+  if (titleTokens.length === 0) {
+    return 0;
+  }
+
+  const corroboratingSources = new Set(
+    articles
+      .filter((candidate) => candidate.id !== article.id && candidate.source !== article.source)
+      .filter((candidate) => {
+        const candidateText = normalizeText(`${candidate.title} ${candidate.summary}`);
+        return titleTokens.some((token) => candidateText.includes(token));
+      })
+      .map((candidate) => candidate.source),
+  );
+
+  if (corroboratingSources.size >= 2) return 0.9;
+  if (corroboratingSources.size === 1) return 0.45;
+  return 0;
 }
 
 function detectTopicCluster(article: NormalizedArticle): string {
@@ -305,6 +347,7 @@ function buildPriorCoverage(priorBriefings: Briefing[], date: string): PriorCove
         type: article.type,
         category: article.category,
         region: article.region,
+        layer: article.type === "research" ? "research" : "general-news",
         normalizedTitle: normalizeText(article.title),
         feedId: article.source,
         ingestedAt: `${article.date}T00:00:00.000Z`,
@@ -368,23 +411,25 @@ function getOverlapPenalty(article: NormalizedArticle, priorCoverage: PriorCover
   return penalty;
 }
 
-function scoreArticle(article: NormalizedArticle, priorCoverage: PriorCoverage): number {
+function scoreArticle(article: NormalizedArticle, articles: NormalizedArticle[], priorCoverage: PriorCoverage): number {
   const overlapPenalty = getOverlapPenalty(article, priorCoverage);
   if (!Number.isFinite(overlapPenalty)) {
     return Number.NEGATIVE_INFINITY;
   }
 
   return getSourcePriority(article)
+    + getLayerPriority(article)
     + getCategoryPriority(article)
     + getRecencyPriority(article)
     + getSignalPriority(article)
+    + getMultiSourceValidationPriority(article, articles)
     - overlapPenalty;
 }
 
 function selectArticlesForGeneration(articles: NormalizedArticle[], priorBriefings: Briefing[], date: string): NormalizedArticle[] {
   const priorCoverage = buildPriorCoverage(priorBriefings, date);
   const rankedArticles = [...articles]
-    .map((article) => ({ article, score: scoreArticle(article, priorCoverage) }))
+    .map((article) => ({ article, score: scoreArticle(article, articles, priorCoverage) }))
     .filter((entry) => Number.isFinite(entry.score))
     .sort((left, right) => right.score - left.score)
     .map((entry) => entry.article);
@@ -394,32 +439,42 @@ function selectArticlesForGeneration(articles: NormalizedArticle[], priorBriefin
   const categoryCounts = new Map<string, number>();
   const typeCounts = new Map<string, number>();
   const clusterCounts = new Map<string, number>();
+  const layerCounts = new Map<FeedLayer, number>();
 
-  for (const article of rankedArticles) {
-    if (selected.length >= MAX_GENERATION_ARTICLES) {
-      break;
-    }
-
+  const addArticle = (article: NormalizedArticle) => {
     const sourceCount = sourceCounts.get(article.source) ?? 0;
     const categoryCount = categoryCounts.get(article.category) ?? 0;
     const typeCount = typeCounts.get(article.type) ?? 0;
     const cluster = detectTopicCluster(article);
     const clusterCount = clusterCounts.get(cluster) ?? 0;
+    const layerCount = layerCounts.get(article.layer) ?? 0;
 
     if (sourceCount >= 4) {
-      continue;
+      return false;
     }
 
     if (categoryCount >= 5) {
-      continue;
+      return false;
     }
 
     if (article.type === "research" && typeCount >= 5) {
-      continue;
+      return false;
     }
 
     if (clusterCount >= 2) {
-      continue;
+      return false;
+    }
+
+    if (article.layer === "general-news" && layerCount >= 4) {
+      return false;
+    }
+
+    if (article.layer === "official" && layerCount >= 6) {
+      return false;
+    }
+
+    if (article.layer === "specialist-news" && layerCount >= 4) {
+      return false;
     }
 
     selected.push(article);
@@ -427,6 +482,33 @@ function selectArticlesForGeneration(articles: NormalizedArticle[], priorBriefin
     categoryCounts.set(article.category, categoryCount + 1);
     typeCounts.set(article.type, typeCount + 1);
     clusterCounts.set(cluster, clusterCount + 1);
+    layerCounts.set(article.layer, layerCount + 1);
+    return true;
+  };
+
+  const layerSeedOrder: FeedLayer[] = ["general-news", "specialist-news", "official", "research"];
+  for (const layer of layerSeedOrder) {
+    if (selected.length >= MAX_GENERATION_ARTICLES) {
+      break;
+    }
+
+    const candidate = rankedArticles.find((article) =>
+      article.layer === layer && !selected.some((selectedArticle) => selectedArticle.id === article.id),
+    );
+
+    if (candidate) {
+      addArticle(candidate);
+    }
+  }
+
+  for (const article of rankedArticles) {
+    if (selected.length >= MAX_GENERATION_ARTICLES) {
+      break;
+    }
+    if (selected.some((selectedArticle) => selectedArticle.id === article.id)) {
+      continue;
+    }
+    addArticle(article);
   }
 
   if (selected.length < Math.min(MAX_GENERATION_ARTICLES, rankedArticles.length)) {

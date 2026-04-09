@@ -400,6 +400,7 @@ export async function probeGenerationHandler(
         type: "news",
         category: "Model",
         region: "Global",
+        layer: "official",
         normalizedTitle: "openai probe article for deployment diagnostics",
         feedId: "system-probe",
         ingestedAt: new Date().toISOString(),

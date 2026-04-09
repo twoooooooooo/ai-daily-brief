@@ -2,12 +2,14 @@ import type { ArticleType, Category, Region } from "./contracts.js";
 
 export type FeedKind = ArticleType;
 export type FeedFormat = "rss" | "anthropic-newsroom";
+export type FeedLayer = "general-news" | "specialist-news" | "official" | "research";
 
 export interface RssFeedConfig {
   id: string;
   name: string;
   url: string;
   format?: FeedFormat;
+  layer?: FeedLayer;
   kind: FeedKind;
   category: Category;
   region: Region;
@@ -25,6 +27,7 @@ export interface NormalizedArticle {
   type: ArticleType;
   category: Category;
   region: Region;
+  layer: FeedLayer;
   normalizedTitle: string;
   feedId: string;
   ingestedAt: string;
