@@ -43,6 +43,7 @@ const xmlParser = new XMLParser({
 });
 
 const logger = createLogger("rss-ingestion");
+const anthropicBaseUrl = "https://www.anthropic.com";
 
 export class RssIngestionError extends Error {
   constructor(message: string, public readonly cause?: unknown) {
@@ -117,6 +118,16 @@ function resolveContent(item: ParsedFeedItem): string | undefined {
   return normalized || undefined;
 }
 
+function decodeHtmlEntities(value: string): string {
+  return value
+    .replace(/&#x27;/g, "'")
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, "\"")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">");
+}
+
 function buildArticleId(feed: RssFeedConfig, title: string, publishedAt: string): string {
   return `${feed.id}-${slugify(title)}-${publishedAt.slice(0, 10)}`;
 }
@@ -176,13 +187,70 @@ async function fetchFeedXml(feed: RssFeedConfig): Promise<string> {
   return response.text();
 }
 
+function parseAnthropicNewsroom(feed: RssFeedConfig, html: string): NormalizedArticle[] {
+  const itemPattern = /<a href="(?<path>\/(?:news\/[a-z0-9-]+|[a-z0-9-]+))"[^>]*>(?:(?!<a\b)[\s\S])*?<time[^>]*>(?<date>[^<]+)<\/time>(?:(?!<a\b)[\s\S])*?<h[1-6][^>]*>(?<title>[^<]+)<\/h[1-6]>(?:(?!<a\b)[\s\S])*?<p[^>]*>(?<summary>[\s\S]*?)<\/p>/g;
+  const articles = new Map<string, NormalizedArticle>();
+
+  for (const match of html.matchAll(itemPattern)) {
+    const path = match.groups?.path?.trim() ?? "";
+    const rawTitle = decodeHtmlEntities(match.groups?.title ?? "");
+    const rawSummary = decodeHtmlEntities(match.groups?.summary ?? "");
+    const rawDate = decodeHtmlEntities(match.groups?.date ?? "");
+
+    if (!path || !rawTitle || !rawSummary || !rawDate) {
+      continue;
+    }
+
+    if (!path.startsWith("/news/") && path !== "/81k-interviews") {
+      continue;
+    }
+
+    const parsedDate = new Date(rawDate);
+    const publishedAt = Number.isNaN(parsedDate.getTime())
+      ? new Date().toISOString()
+      : parsedDate.toISOString();
+    const title = normalizeWhitespace(rawTitle);
+    const summary = normalizeWhitespace(rawSummary);
+    const sourceUrl = `${anthropicBaseUrl}${path}`;
+
+    const article: NormalizedArticle = {
+      id: buildArticleId(feed, title, publishedAt),
+      title,
+      source: feed.source,
+      sourceUrl,
+      publishedAt,
+      summary,
+      content: summary,
+      type: feed.kind,
+      category: feed.category,
+      region: feed.region,
+      normalizedTitle: normalizeTitle(title),
+      feedId: feed.id,
+      ingestedAt: new Date().toISOString(),
+    };
+
+    articles.set(createArticleStoreKey(article), article);
+  }
+
+  return [...articles.values()].sort((left, right) => right.publishedAt.localeCompare(left.publishedAt));
+}
+
 async function ingestFeed(feed: RssFeedConfig): Promise<NormalizedArticle[]> {
   logger.info("Starting RSS feed ingestion.", { feedId: feed.id, url: feed.url });
-  const xml = await fetchFeedXml(feed);
+  const body = await fetchFeedXml(feed);
+
+  if (feed.format === "anthropic-newsroom") {
+    const normalizedArticles = parseAnthropicNewsroom(feed, body);
+    logger.info("Completed Anthropic newsroom ingestion.", {
+      feedId: feed.id,
+      discoveredArticles: normalizedArticles.length,
+    });
+    return normalizedArticles;
+  }
 
   let parsedXml: ParsedRssRoot;
   try {
-    parsedXml = xmlParser.parse(xml) as ParsedRssRoot;
+    parsedXml = xmlParser.parse(body) as ParsedRssRoot;
   } catch (error) {
     throw new RssIngestionError(`Failed to parse RSS feed: ${feed.id}`, error);
   }

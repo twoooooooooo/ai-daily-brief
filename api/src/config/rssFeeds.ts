@@ -2,6 +2,16 @@ import type { RssFeedConfig } from "../shared/rss.js";
 
 export const rssFeeds: RssFeedConfig[] = [
   {
+    id: "anthropic-newsroom",
+    name: "Anthropic Newsroom",
+    source: "Anthropic",
+    url: "https://www.anthropic.com/news",
+    format: "anthropic-newsroom",
+    kind: "news",
+    category: "Model",
+    region: "US",
+  },
+  {
     id: "google-ai-blog",
     name: "Google AI Blog",
     source: "Google AI Blog",

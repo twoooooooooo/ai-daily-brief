@@ -1,11 +1,13 @@
 import type { ArticleType, Category, Region } from "./contracts.js";
 
 export type FeedKind = ArticleType;
+export type FeedFormat = "rss" | "anthropic-newsroom";
 
 export interface RssFeedConfig {
   id: string;
   name: string;
   url: string;
+  format?: FeedFormat;
   kind: FeedKind;
   category: Category;
   region: Region;
