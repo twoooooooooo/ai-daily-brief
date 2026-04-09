@@ -103,4 +103,15 @@ export interface BriefingOperationalStatus {
     edition?: BriefingEdition;
     error?: string;
   };
+  latestEmailJob?: {
+    id: string;
+    status: "running" | "completed" | "failed" | "skipped";
+    updatedAt: string;
+    date?: string;
+    edition?: BriefingEdition;
+    briefingId?: string;
+    recipientCount?: number;
+    reason?: string;
+    error?: string;
+  };
 }

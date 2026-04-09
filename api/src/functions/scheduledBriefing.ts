@@ -1,6 +1,12 @@
 import { app, type InvocationContext, type Timer } from "@azure/functions";
 import { getBriefingEmailScheduleConfigs, getDailyBriefingScheduleConfigs } from "../config/schedules.js";
 import { getLatestBriefingForEdition, getBriefingByDateAndEdition } from "../services/briefingRepository.js";
+import {
+  recordBriefingEmailJobCompleted,
+  recordBriefingEmailJobFailed,
+  recordBriefingEmailJobSkipped,
+  recordBriefingEmailJobStarted,
+} from "../services/briefingEmailJobService.js";
 import { sendBriefingEmail } from "../services/briefingEmailService.js";
 import { runDailyBriefingPipeline } from "../services/dailyBriefingPipeline.js";
 import { createCorrelationId, createLogger } from "../utils/logger.js";
@@ -85,8 +91,15 @@ export async function scheduledBriefingEmailHandler(
   const targetDate = resolveBriefingDate();
   const sameDayBriefing = await getBriefingByDateAndEdition(targetDate, edition);
   const briefing = sameDayBriefing ?? await getLatestBriefingForEdition(edition);
+  const emailJobId = createCorrelationId(`briefing-email-${edition.toLowerCase()}`);
 
   if (!briefing) {
+    recordBriefingEmailJobSkipped({
+      id: emailJobId,
+      date: targetDate,
+      edition,
+      reason: "no-persisted-briefing",
+    });
     scopedLogger.warn("Scheduled briefing email job skipped because no persisted briefing was available.", {
       edition,
       date: targetDate,
@@ -95,12 +108,37 @@ export async function scheduledBriefingEmailHandler(
   }
 
   try {
-    await sendBriefingEmail(briefing, {
+    recordBriefingEmailJobStarted({
+      id: emailJobId,
+      date: briefing.date,
+      edition: briefing.edition,
+      briefingId: briefing.id,
+    });
+
+    const result = await sendBriefingEmail(briefing, {
       correlationId,
       invocationId: context.invocationId,
       operationName: "scheduledBriefingEmail",
       component: "briefing-email",
     });
+
+    if (result.skipped) {
+      recordBriefingEmailJobSkipped({
+        id: emailJobId,
+        date: briefing.date,
+        edition: briefing.edition,
+        briefingId: briefing.id,
+        reason: result.reason,
+      });
+    } else {
+      recordBriefingEmailJobCompleted({
+        id: emailJobId,
+        date: briefing.date,
+        edition: briefing.edition,
+        briefingId: briefing.id,
+        recipientCount: result.recipientCount,
+      });
+    }
 
     scopedLogger.info("Scheduled briefing email job completed.", {
       briefingId: briefing.id,
@@ -109,6 +147,13 @@ export async function scheduledBriefingEmailHandler(
       invocationId: context.invocationId,
     });
   } catch (error) {
+    recordBriefingEmailJobFailed({
+      id: emailJobId,
+      date: briefing.date,
+      edition: briefing.edition,
+      briefingId: briefing.id,
+      error: error instanceof Error ? error.message : "Unknown scheduled email failure.",
+    });
     scopedLogger.exception("Scheduled briefing email job failed.", error, {
       edition,
       schedule,

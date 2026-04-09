@@ -2,13 +2,21 @@ import { app, type HttpRequest, type HttpResponseInit, type InvocationContext } 
 import { badRequestResponse, internalErrorResponse, jsonResponse, notFoundResponse, unauthorizedResponse } from "../http/responses.js";
 import { getAdminApiSettings, getAdminProbeSettings } from "../config/runtimeConfig.js";
 import { BriefingGenerationError, generateDailyBriefing, probeOpenAIConnection } from "../services/briefingGenerationService.js";
+import {
+  recordBriefingEmailJobCompleted,
+  recordBriefingEmailJobFailed,
+  recordBriefingEmailJobSkipped,
+  recordBriefingEmailJobStarted,
+} from "../services/briefingEmailJobService.js";
 import { getDailyBriefingJob, startDailyBriefingJob } from "../services/dailyBriefingJobService.js";
 import { DailyBriefingPipelineError, runDailyBriefingPipeline } from "../services/dailyBriefingPipeline.js";
-import { saveBriefingWithOptions } from "../services/briefingRepository.js";
+import { getBriefingByDateAndEdition, getLatestBriefingForEdition, saveBriefingWithOptions } from "../services/briefingRepository.js";
+import { sendBriefingEmail } from "../services/briefingEmailService.js";
 import { ingestConfiguredRssFeeds } from "../services/rssIngestionService.js";
 import type { BriefingEdition } from "../shared/contracts.js";
 import type { NormalizedArticle } from "../shared/rss.js";
 import { createCorrelationId, createLogger } from "../utils/logger.js";
+import { resolveBriefingDate } from "../utils/briefingEdition.js";
 
 const logger = createLogger("admin-api");
 
@@ -486,6 +494,81 @@ export async function probePersistenceHandler(
   });
 }
 
+export async function sendBriefingEmailHandler(
+  request: HttpRequest,
+  context: InvocationContext,
+): Promise<HttpResponseInit> {
+  return handleAdminRequest(context, "sendBriefingEmail", async (logContext) => {
+    const adminKey = request.query.get("adminKey");
+    const payload = adminKey ? { adminApiKey: adminKey } : {};
+
+    if (!isAuthorizedAdminRequest(request, payload)) {
+      logger.child(logContext).warn("Rejected unauthorized admin request.");
+      return unauthorizedResponse("Unauthorized admin operation.");
+    }
+
+    const edition = parseOptionalEdition(request.query.get("edition")) ?? "Afternoon";
+    const date = request.query.get("date")?.trim() || resolveBriefingDate();
+    const briefing = await getBriefingByDateAndEdition(date, edition) ?? await getLatestBriefingForEdition(edition);
+    const emailJobId = createCorrelationId(`manual-email-${edition.toLowerCase()}`);
+
+    if (!briefing) {
+      recordBriefingEmailJobSkipped({
+        id: emailJobId,
+        date,
+        edition,
+        reason: "no-persisted-briefing",
+      });
+      return notFoundResponse("No persisted briefing was available for email delivery.");
+    }
+
+    try {
+      recordBriefingEmailJobStarted({
+        id: emailJobId,
+        date: briefing.date,
+        edition: briefing.edition,
+        briefingId: briefing.id,
+      });
+
+      const result = await sendBriefingEmail(briefing, logContext);
+      if (result.skipped) {
+        recordBriefingEmailJobSkipped({
+          id: emailJobId,
+          date: briefing.date,
+          edition: briefing.edition,
+          briefingId: briefing.id,
+          reason: result.reason,
+        });
+      } else {
+        recordBriefingEmailJobCompleted({
+          id: emailJobId,
+          date: briefing.date,
+          edition: briefing.edition,
+          briefingId: briefing.id,
+          recipientCount: result.recipientCount,
+        });
+      }
+
+      return jsonResponse({
+        ok: true,
+        skipped: result.skipped,
+        reason: result.reason,
+        briefingId: briefing.id,
+        recipientCount: result.recipientCount ?? 0,
+      });
+    } catch (error) {
+      recordBriefingEmailJobFailed({
+        id: emailJobId,
+        date: briefing.date,
+        edition: briefing.edition,
+        briefingId: briefing.id,
+        error: extractErrorMessage(error) ?? "Unknown email delivery failure.",
+      });
+      throw error;
+    }
+  });
+}
+
 app.http("ingestRss", {
   methods: ["POST"],
   authLevel: "anonymous",
@@ -547,4 +630,11 @@ app.http("probePersistence", {
   authLevel: "anonymous",
   route: "ops/probe-persistence",
   handler: probePersistenceHandler,
+});
+
+app.http("sendBriefingEmail", {
+  methods: ["GET"],
+  authLevel: "anonymous",
+  route: "ops/send-briefing-email",
+  handler: sendBriefingEmailHandler,
 });

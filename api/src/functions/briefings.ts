@@ -7,6 +7,7 @@ import { getBriefingStoreStatus } from "../repositories/briefingStoreProvider.js
 import { getSubscriberStats } from "../repositories/subscriberStore.js";
 import { getBriefingEmailSettings, getDailyBriefingScheduleSettings } from "../config/runtimeConfig.js";
 import { getLatestDailyBriefingJob } from "../services/dailyBriefingJobService.js";
+import { getLatestBriefingEmailJob } from "../services/briefingEmailJobService.js";
 
 async function handleRequest(
   context: InvocationContext,
@@ -141,6 +142,7 @@ export async function getOperationalStatusHandler(
   return handleRequest(context, async () => {
     const latestBriefing = await getLatestPersistedBriefing();
     const latestJob = getLatestDailyBriefingJob();
+    const latestEmailJob = getLatestBriefingEmailJob();
     const emailSettings = getBriefingEmailSettings();
     const subscriberStats = await getSubscriberStats();
     const status: BriefingOperationalStatus = {
@@ -169,6 +171,17 @@ export async function getOperationalStatusHandler(
         date: latestJob.date,
         edition: latestJob.edition,
         error: latestJob.error,
+      } : undefined,
+      latestEmailJob: latestEmailJob ? {
+        id: latestEmailJob.id,
+        status: latestEmailJob.status,
+        updatedAt: latestEmailJob.updatedAt,
+        date: latestEmailJob.date,
+        edition: latestEmailJob.edition,
+        briefingId: latestEmailJob.briefingId,
+        recipientCount: latestEmailJob.recipientCount,
+        reason: latestEmailJob.reason,
+        error: latestEmailJob.error,
       } : undefined,
     };
 
