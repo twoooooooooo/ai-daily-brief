@@ -22,14 +22,24 @@ function buildSubject(briefing: Briefing, subjectPrefix: string): string {
   return `${subjectPrefix} ${briefing.date} ${getEditionLabel(briefing.edition)} Edition`;
 }
 
-function buildPlainTextBody(briefing: Briefing): string {
+function buildBriefingLink(siteUrl: string, briefing: Briefing): string {
+  const baseUrl = siteUrl.replace(/\/+$/, "");
+  return `${baseUrl}/archive/${encodeURIComponent(briefing.id)}`;
+}
+
+function buildPlainTextBody(briefing: Briefing, siteUrl: string): string {
   const articles = [...briefing.issues, ...briefing.researchHighlights];
+  const briefingLink = buildBriefingLink(siteUrl, briefing);
   const lines = [
     `${briefing.date} ${getEditionLabel(briefing.edition)} Edition`,
     "",
     briefing.dailySummary.trend,
     "",
     `Top keywords: ${briefing.dailySummary.topKeywords.join(", ")}`,
+    `Trending topics: ${briefing.trendingTopics.join(", ")}`,
+    "",
+    `View full briefing: ${briefingLink}`,
+    `Open homepage: ${siteUrl}`,
     "",
     ...articles.slice(0, 8).flatMap((article, index) => [
       `${index + 1}. ${article.title}`,
@@ -45,8 +55,9 @@ function buildPlainTextBody(briefing: Briefing): string {
   return lines.join("\n").trim();
 }
 
-function buildHtmlBody(briefing: Briefing): string {
+function buildHtmlBody(briefing: Briefing, siteUrl: string): string {
   const articles = [...briefing.issues, ...briefing.researchHighlights];
+  const briefingLink = buildBriefingLink(siteUrl, briefing);
   const articleMarkup = articles.slice(0, 8).map((article) => `
     <div style="padding:18px 0;border-top:1px solid #E5E7EB;">
       <div style="font-size:12px;color:#64748B;margin-bottom:8px;">${escapeHtml(article.source)} · ${escapeHtml(article.category)} · ${escapeHtml(article.importance)}</div>
@@ -65,11 +76,19 @@ function buildHtmlBody(briefing: Briefing): string {
           <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#9FEACD;margin-bottom:12px;">Global AI Daily Brief</div>
           <div style="font-size:30px;line-height:1.2;font-weight:700;margin-bottom:10px;">${escapeHtml(briefing.date)} ${escapeHtml(getEditionLabel(briefing.edition))} Edition</div>
           <div style="font-size:16px;line-height:1.7;color:#D9E4F7;">${escapeHtml(briefing.dailySummary.trend)}</div>
+          <div style="margin-top:20px;">
+            <a href="${escapeHtml(briefingLink)}" style="display:inline-block;padding:11px 18px;border-radius:999px;background:#87F5D1;color:#08111F;font-size:13px;font-weight:700;text-decoration:none;margin-right:10px;">View Full Briefing</a>
+            <a href="${escapeHtml(siteUrl)}" style="display:inline-block;padding:11px 18px;border-radius:999px;border:1px solid rgba(255,255,255,0.18);color:#FFFFFF;font-size:13px;font-weight:700;text-decoration:none;">Open Homepage</a>
+          </div>
         </div>
         <div style="padding:28px 32px;">
           <div style="font-size:12px;color:#64748B;text-transform:uppercase;letter-spacing:0.14em;margin-bottom:12px;">Top Keywords</div>
           <div style="margin-bottom:20px;">
             ${briefing.dailySummary.topKeywords.map((keyword) => `<span style="display:inline-block;margin:0 8px 8px 0;padding:7px 12px;border-radius:999px;background:#EEF2FF;color:#1D4ED8;font-size:12px;font-weight:600;">${escapeHtml(keyword)}</span>`).join("")}
+          </div>
+          <div style="margin-bottom:20px;">
+            <div style="font-size:12px;color:#64748B;text-transform:uppercase;letter-spacing:0.14em;margin-bottom:12px;">Trending Topics</div>
+            ${briefing.trendingTopics.map((topic) => `<span style="display:inline-block;margin:0 8px 8px 0;padding:7px 12px;border-radius:999px;background:#ECFDF5;color:#047857;font-size:12px;font-weight:600;">${escapeHtml(topic)}</span>`).join("")}
           </div>
           ${articleMarkup}
         </div>
@@ -100,12 +119,12 @@ export async function sendBriefingEmail(
 
   const client = new EmailClient(settings.connectionString);
   const poller = await client.beginSend({
-    senderAddress: settings.senderAddress,
-    content: {
-      subject: buildSubject(briefing, settings.subjectPrefix),
-      plainText: buildPlainTextBody(briefing),
-      html: buildHtmlBody(briefing),
-    },
+      senderAddress: settings.senderAddress,
+      content: {
+        subject: buildSubject(briefing, settings.subjectPrefix),
+        plainText: buildPlainTextBody(briefing, settings.siteUrl),
+        html: buildHtmlBody(briefing, settings.siteUrl),
+      },
     recipients: {
       to: settings.recipients.map((address) => ({ address })),
     },

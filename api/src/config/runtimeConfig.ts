@@ -45,6 +45,7 @@ export interface BriefingEmailSettings {
   senderAddress?: string;
   recipients: string[];
   subjectPrefix: string;
+  siteUrl: string;
   runs: ScheduledBriefingRunSettings[];
 }
 
@@ -145,6 +146,7 @@ export function getBriefingEmailSettings(): BriefingEmailSettings {
     senderAddress: readEnv("BRIEFING_EMAIL_SENDER"),
     recipients,
     subjectPrefix: readEnv("BRIEFING_EMAIL_SUBJECT_PREFIX") ?? "[Global AI Daily Brief]",
+    siteUrl: readEnv("BRIEFING_SITE_URL") ?? "https://lemon-sea-076f4910f.6.azurestaticapps.net",
     runs: [
       { edition: "Morning", cron: morningEmailSchedule },
       { edition: "Afternoon", cron: afternoonEmailSchedule },

@@ -72,6 +72,7 @@ For the Functions app, configure these in Azure:
 - `BRIEFING_EMAIL_SENDER`
 - `BRIEFING_EMAIL_RECIPIENTS`
 - `BRIEFING_EMAIL_SUBJECT_PREFIX`
+- `BRIEFING_SITE_URL`
 - `MORNING_EMAIL_SCHEDULE`
 - `AFTERNOON_EMAIL_SCHEDULE`
 - `BRIEFING_STORAGE_FILE` only if you intentionally want a custom filesystem path

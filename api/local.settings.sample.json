@@ -25,6 +25,7 @@
     "BRIEFING_EMAIL_SENDER": "DoNotReply@your-resource.azurecomm.net",
     "BRIEFING_EMAIL_RECIPIENTS": "you@example.com",
     "BRIEFING_EMAIL_SUBJECT_PREFIX": "[Global AI Daily Brief]",
+    "BRIEFING_SITE_URL": "https://lemon-sea-076f4910f.6.azurestaticapps.net",
     "MORNING_EMAIL_SCHEDULE": "0 0 8 * * *",
     "AFTERNOON_EMAIL_SCHEDULE": "0 50 12 * * *"
   }
