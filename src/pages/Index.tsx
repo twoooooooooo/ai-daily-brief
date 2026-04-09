@@ -6,6 +6,7 @@ import IssueCard from "@/components/IssueCard";
 import ResearchCard from "@/components/ResearchCard";
 import TrendKeywords from "@/components/TrendKeywords";
 import DetailModal from "@/components/DetailModal";
+import MailingListPanel from "@/components/MailingListPanel";
 import LoadingSkeleton from "@/components/LoadingSkeleton";
 import EmptyState from "@/components/EmptyState";
 import ErrorState from "@/components/ErrorState";
@@ -75,6 +76,8 @@ const Index = () => {
           onToggleLanguage={() => setShowEnglishSummary((value) => !value)}
         />
       )}
+
+      <MailingListPanel />
 
       {/* Search + filters */}
       <div className="mx-auto max-w-7xl px-4 pt-5 sm:px-6 lg:px-8">

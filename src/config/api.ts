@@ -29,4 +29,8 @@ export const endpoints = {
   runDailyBriefing: `${API_BASE_URL}/ops/run-daily-briefing`,
   /** GET /api/ops/run-daily-briefing-jobs/:jobId */
   runDailyBriefingJob: (jobId: string) => `${API_BASE_URL}/ops/run-daily-briefing-jobs/${encodeURIComponent(jobId.trim())}`,
+  /** POST /api/subscriptions/briefings */
+  subscribeBriefingMailingList: `${API_BASE_URL}/subscriptions/briefings`,
+  /** POST /api/subscriptions/briefings/unsubscribe */
+  unsubscribeBriefingMailingList: `${API_BASE_URL}/subscriptions/briefings/unsubscribe`,
 } as const;

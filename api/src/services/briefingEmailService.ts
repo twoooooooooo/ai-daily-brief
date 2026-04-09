@@ -1,5 +1,6 @@
 import { EmailClient } from "@azure/communication-email";
 import { getBriefingEmailSettings } from "../config/runtimeConfig.js";
+import { listActiveSubscribers } from "../repositories/subscriberStore.js";
 import type { Briefing } from "../shared/contracts.js";
 import { createLogger, type LogContext } from "../utils/logger.js";
 
@@ -108,13 +109,21 @@ export async function sendBriefingEmail(
     return { skipped: true, reason: "email-disabled" };
   }
 
-  if (!settings.connectionString || !settings.senderAddress || settings.recipients.length === 0) {
+  if (!settings.connectionString || !settings.senderAddress) {
     scopedLogger.warn("Skipping briefing email because email configuration is incomplete.", {
       hasConnectionString: Boolean(settings.connectionString),
       hasSenderAddress: Boolean(settings.senderAddress),
       recipientCount: settings.recipients.length,
     });
     return { skipped: true, reason: "email-config-incomplete" };
+  }
+
+  const subscriberAddresses = (await listActiveSubscribers()).map((subscriber) => subscriber.email);
+  const recipientAddresses = [...new Set([...settings.recipients, ...subscriberAddresses])];
+
+  if (recipientAddresses.length === 0) {
+    scopedLogger.warn("Skipping briefing email because there are no recipients configured.");
+    return { skipped: true, reason: "no-recipients" };
   }
 
   const client = new EmailClient(settings.connectionString);
@@ -126,20 +135,20 @@ export async function sendBriefingEmail(
       subject: buildSubject(briefing, settings.subjectPrefix),
       plainText: buildPlainTextBody(briefing, settings.siteUrl),
         html: buildHtmlBody(briefing, settings.siteUrl),
-      },
+    },
     recipients: {
-      to: settings.recipients.map((address) => ({ address })),
+      to: recipientAddresses.map((address) => ({ address })),
     },
   });
 
   await poller.pollUntilDone();
   scopedLogger.info("Sent briefing email notification.", {
     briefingId: briefing.id,
-    recipientCount: settings.recipients.length,
+    recipientCount: recipientAddresses.length,
   });
 
   return {
     skipped: false,
-    recipientCount: settings.recipients.length,
+    recipientCount: recipientAddresses.length,
   };
 }

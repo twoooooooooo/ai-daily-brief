@@ -50,6 +50,14 @@ export interface BriefingEmailSettings {
   runs: ScheduledBriefingRunSettings[];
 }
 
+export interface SubscriberStorageSettings {
+  provider: "auto" | "file" | "blob";
+  filePath?: string;
+  blobContainerName: string;
+  blobName: string;
+  connectionString?: string;
+}
+
 const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
 const DEFAULT_OPENAI_MODEL = "gpt-4.1-mini";
 const DEFAULT_DAILY_BRIEFING_SCHEDULE = "0 0 6 * * *";
@@ -115,6 +123,28 @@ export function getDailyBriefingScheduleSettings(): ScheduleSettings {
       { edition: "Morning", cron: morningSchedule },
       { edition: "Afternoon", cron: afternoonSchedule },
     ],
+  };
+}
+
+export function getSubscriberStorageSettings(): SubscriberStorageSettings {
+  const configuredFilePath = readEnv("SUBSCRIBER_STORAGE_FILE");
+  const homeDirectory = readEnv("HOME");
+  const environment = getEnvironmentSettings();
+  const provider = readEnv("SUBSCRIBER_STORAGE_PROVIDER") ?? readEnv("BRIEFING_STORAGE_PROVIDER");
+
+  return {
+    provider: provider === "file" || provider === "blob" ? provider : "auto",
+    filePath: configuredFilePath
+      ?? (environment.isProduction && homeDirectory
+        ? `${homeDirectory}/data/subscribers.json`
+        : undefined),
+    blobContainerName: readEnv("SUBSCRIBER_STORAGE_CONTAINER")
+      ?? readEnv("BRIEFING_STORAGE_CONTAINER")
+      ?? "briefings",
+    blobName: readEnv("SUBSCRIBER_STORAGE_BLOB_NAME") ?? "subscribers.json",
+    connectionString: readEnv("SUBSCRIBER_STORAGE_CONNECTION_STRING")
+      ?? readEnv("BRIEFING_STORAGE_CONNECTION_STRING")
+      ?? readEnv("AzureWebJobsStorage"),
   };
 }
 

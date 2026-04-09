@@ -75,6 +75,11 @@ export interface BriefingOperationalStatus {
       cron: string;
     }>;
   };
+  subscribers?: {
+    active: number;
+    total: number;
+    provider: "blob" | "file";
+  };
   schedule: {
     enabled: boolean;
     timezone: string;
