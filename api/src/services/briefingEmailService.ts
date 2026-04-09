@@ -59,39 +59,70 @@ function buildPlainTextBody(briefing: Briefing, siteUrl: string): string {
 function buildHtmlBody(briefing: Briefing, siteUrl: string): string {
   const articles = [...briefing.issues, ...briefing.researchHighlights];
   const briefingLink = buildBriefingLink(siteUrl, briefing);
+  const lastUpdatedLabel = briefing.lastUpdatedAt
+    ? new Date(briefing.lastUpdatedAt).toLocaleString("ko-KR", {
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    })
+    : null;
   const articleMarkup = articles.slice(0, 8).map((article) => `
-    <div style="padding:18px 0;border-top:1px solid #E5E7EB;">
-      <div style="font-size:12px;color:#64748B;margin-bottom:8px;">${escapeHtml(article.source)} · ${escapeHtml(article.category)} · ${escapeHtml(article.importance)}</div>
-      <div style="font-size:20px;line-height:1.35;font-weight:700;color:#0F172A;margin-bottom:10px;">${escapeHtml(article.title)}</div>
-      <div style="font-size:14px;line-height:1.7;color:#334155;margin-bottom:10px;">${escapeHtml(article.summary)}</div>
-      <div style="font-size:13px;line-height:1.7;color:#0F172A;margin-bottom:8px;"><strong>Why it matters:</strong> ${escapeHtml(article.whyItMatters)}</div>
-      <div style="font-size:13px;line-height:1.7;color:#0F172A;margin-bottom:10px;"><strong>Practical impact:</strong> ${escapeHtml(article.practicalImpact)}</div>
-      <a href="${escapeHtml(article.sourceUrl)}" style="font-size:13px;color:#2563EB;text-decoration:none;">Read source</a>
+    <div style="padding:22px 22px 20px;border:1px solid #E5E7EB;border-radius:18px;background:#FFFFFF;margin-bottom:14px;">
+      <div style="font-size:12px;color:#64748B;margin-bottom:10px;letter-spacing:0.04em;">${escapeHtml(article.source)} · ${escapeHtml(article.category)} · ${escapeHtml(article.importance)}</div>
+      <div style="font-size:21px;line-height:1.4;font-weight:700;color:#0F172A;margin-bottom:10px;">${escapeHtml(article.title)}</div>
+      <div style="font-size:14px;line-height:1.75;color:#334155;margin-bottom:12px;">${escapeHtml(article.summary)}</div>
+      <div style="font-size:13px;line-height:1.75;color:#0F172A;margin-bottom:8px;"><strong>Why it matters:</strong> ${escapeHtml(article.whyItMatters)}</div>
+      <div style="font-size:13px;line-height:1.75;color:#0F172A;margin-bottom:14px;"><strong>Practical impact:</strong> ${escapeHtml(article.practicalImpact)}</div>
+      <a href="${escapeHtml(article.sourceUrl)}" style="display:inline-block;font-size:13px;color:#1D4ED8;text-decoration:none;font-weight:700;">Read source</a>
     </div>
   `).join("");
 
   return `
-    <div style="margin:0;padding:32px;background:#F8FAFC;font-family:Arial,Helvetica,sans-serif;color:#0F172A;">
-      <div style="max-width:820px;margin:0 auto;background:#FFFFFF;border:1px solid #E2E8F0;border-radius:24px;overflow:hidden;">
-        <div style="padding:32px;background:linear-gradient(135deg,#08111F 0%,#16325C 100%);color:#FFFFFF;">
-          <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:#9FEACD;margin-bottom:12px;">Global AI Daily Brief</div>
-          <div style="font-size:30px;line-height:1.2;font-weight:700;margin-bottom:10px;">${escapeHtml(briefing.date)} ${escapeHtml(getEditionLabel(briefing.edition))} Edition</div>
-          <div style="font-size:16px;line-height:1.7;color:#D9E4F7;">${escapeHtml(briefing.dailySummary.trend)}</div>
-          <div style="margin-top:20px;">
-            <a href="${escapeHtml(briefingLink)}" style="display:inline-block;padding:11px 18px;border-radius:999px;background:#87F5D1;color:#08111F;font-size:13px;font-weight:700;text-decoration:none;margin-right:10px;">View Full Briefing</a>
+    <div style="margin:0;padding:28px;background:#F3F6FB;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,Helvetica,sans-serif;color:#0F172A;">
+      <div style="max-width:860px;margin:0 auto;background:#FFFFFF;border:1px solid #E2E8F0;border-radius:28px;overflow:hidden;box-shadow:0 18px 45px rgba(15,23,42,0.06);">
+        <div style="padding:30px 32px;background:linear-gradient(145deg,#0B1527 0%,#17365E 100%);color:#FFFFFF;">
+          <div style="font-size:11px;letter-spacing:0.22em;text-transform:uppercase;color:#8EF0D0;margin-bottom:14px;">Global AI Daily Brief</div>
+          <div style="font-size:32px;line-height:1.2;font-weight:700;margin-bottom:8px;">${escapeHtml(briefing.date)} ${escapeHtml(getEditionLabel(briefing.edition))} Edition</div>
+          <div style="font-size:13px;letter-spacing:0.12em;text-transform:uppercase;color:#A8C5EC;font-weight:700;margin-bottom:18px;">Today's Executive Summary</div>
+          ${lastUpdatedLabel ? `<div style="font-size:12px;color:#D9E4F7;opacity:0.85;margin-bottom:18px;">Last updated ${escapeHtml(lastUpdatedLabel)}</div>` : ""}
+          <div style="border-left:2px solid rgba(142,240,208,0.45);padding-left:16px;font-size:15px;line-height:1.9;color:#E6EEF9;max-width:690px;font-style:italic;">"${escapeHtml(briefing.dailySummary.trend)}"</div>
+          <div style="margin-top:22px;">
+            <a href="${escapeHtml(briefingLink)}" style="display:inline-block;padding:11px 18px;border-radius:999px;background:#86F5D0;color:#08111F;font-size:13px;font-weight:700;text-decoration:none;margin-right:10px;">View Full Briefing</a>
             <a href="${escapeHtml(siteUrl)}" style="display:inline-block;padding:11px 18px;border-radius:999px;border:1px solid rgba(255,255,255,0.18);color:#FFFFFF;font-size:13px;font-weight:700;text-decoration:none;">Open Homepage</a>
           </div>
         </div>
-        <div style="padding:28px 32px;">
-          <div style="font-size:12px;color:#64748B;text-transform:uppercase;letter-spacing:0.14em;margin-bottom:12px;">Top Keywords</div>
-          <div style="margin-bottom:20px;">
-            ${briefing.dailySummary.topKeywords.map((keyword) => `<span style="display:inline-block;margin:0 8px 8px 0;padding:7px 12px;border-radius:999px;background:#EEF2FF;color:#1D4ED8;font-size:12px;font-weight:600;">${escapeHtml(keyword)}</span>`).join("")}
+        <div style="padding:28px 32px 10px;background:#F8FAFC;border-bottom:1px solid #EAEFF6;">
+          <div style="margin-bottom:18px;">
+            <div style="font-size:11px;color:#64748B;text-transform:uppercase;letter-spacing:0.16em;margin-bottom:10px;font-weight:700;">Top Keywords</div>
+            ${briefing.dailySummary.topKeywords.map((keyword) => `<span style="display:inline-block;margin:0 8px 8px 0;padding:8px 12px;border-radius:999px;background:#F1F5F9;border:1px solid #E2E8F0;color:#0F172A;font-size:12px;font-weight:600;">${escapeHtml(keyword)}</span>`).join("")}
           </div>
-          <div style="margin-bottom:20px;">
-            <div style="font-size:12px;color:#64748B;text-transform:uppercase;letter-spacing:0.14em;margin-bottom:12px;">Trending Topics</div>
-            ${briefing.trendingTopics.map((topic) => `<span style="display:inline-block;margin:0 8px 8px 0;padding:7px 12px;border-radius:999px;background:#ECFDF5;color:#047857;font-size:12px;font-weight:600;">${escapeHtml(topic)}</span>`).join("")}
+          <div style="margin-bottom:6px;">
+            <div style="font-size:11px;color:#64748B;text-transform:uppercase;letter-spacing:0.16em;margin-bottom:10px;font-weight:700;">Trending Topics</div>
+            ${briefing.trendingTopics.map((topic) => `<span style="display:inline-block;margin:0 8px 8px 0;padding:8px 12px;border-radius:999px;background:#FFFFFF;border:1px solid #DDE7F5;color:#1D4ED8;font-size:12px;font-weight:600;">${escapeHtml(topic)}</span>`).join("")}
+          </div>
+        </div>
+        <div style="padding:26px 32px;background:#FFFFFF;">
+          <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:22px;">
+            <div style="flex:1 1 180px;min-width:180px;padding:16px 18px;border-radius:18px;background:#F8FAFC;border:1px solid #E5E7EB;">
+              <div style="font-size:10px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;color:#64748B;margin-bottom:6px;">Analyzed Articles</div>
+              <div style="font-size:24px;font-weight:700;color:#0F172A;">${articles.length}</div>
+            </div>
+            <div style="flex:1 1 180px;min-width:180px;padding:16px 18px;border-radius:18px;background:#F8FAFC;border:1px solid #E5E7EB;">
+              <div style="font-size:10px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;color:#64748B;margin-bottom:6px;">Top Category</div>
+              <div style="font-size:24px;font-weight:700;color:#0F172A;">${escapeHtml(briefing.dailySummary.topCategory)}</div>
+            </div>
+            <div style="flex:1 1 180px;min-width:180px;padding:16px 18px;border-radius:18px;background:#F8FAFC;border:1px solid #E5E7EB;">
+              <div style="font-size:10px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;color:#64748B;margin-bottom:6px;">Top Mention</div>
+              <div style="font-size:24px;font-weight:700;color:#0F172A;">${escapeHtml(briefing.dailySummary.topMention)}</div>
+            </div>
           </div>
           ${articleMarkup}
+        </div>
+        <div style="padding:18px 32px 28px;background:#FFFFFF;">
+          <div style="font-size:12px;color:#94A3B8;line-height:1.7;">
+            You're receiving this because you subscribed to Global AI Daily Brief updates.
+          </div>
         </div>
       </div>
     </div>
