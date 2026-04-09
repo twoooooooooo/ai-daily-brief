@@ -23,6 +23,7 @@
     "BRIEFING_EMAIL_ENABLED": "false",
     "BRIEFING_EMAIL_CONNECTION_STRING": "endpoint=https://your-resource.communication.azure.com/;accesskey=your-access-key",
     "BRIEFING_EMAIL_SENDER": "DoNotReply@your-resource.azurecomm.net",
+    "BRIEFING_EMAIL_SENDER_NAME": "Global AI Daily Brief",
     "BRIEFING_EMAIL_RECIPIENTS": "you@example.com",
     "BRIEFING_EMAIL_SUBJECT_PREFIX": "[Global AI Daily Brief]",
     "BRIEFING_SITE_URL": "https://lemon-sea-076f4910f.6.azurestaticapps.net",

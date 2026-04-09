@@ -147,6 +147,7 @@ export async function getOperationalStatusHandler(
         enabled: emailSettings.enabled,
         recipientCount: emailSettings.recipients.length,
         senderConfigured: Boolean(emailSettings.senderAddress),
+        senderNameConfigured: Boolean(emailSettings.senderName),
         runs: emailSettings.runs,
       },
       schedule: getDailyBriefingScheduleSettings(),

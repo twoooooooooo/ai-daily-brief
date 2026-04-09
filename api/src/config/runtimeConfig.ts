@@ -43,6 +43,7 @@ export interface BriefingEmailSettings {
   enabled: boolean;
   connectionString?: string;
   senderAddress?: string;
+  senderName?: string;
   recipients: string[];
   subjectPrefix: string;
   siteUrl: string;
@@ -144,6 +145,7 @@ export function getBriefingEmailSettings(): BriefingEmailSettings {
     enabled: readEnv("BRIEFING_EMAIL_ENABLED") === "true",
     connectionString: readEnv("BRIEFING_EMAIL_CONNECTION_STRING"),
     senderAddress: readEnv("BRIEFING_EMAIL_SENDER"),
+    senderName: readEnv("BRIEFING_EMAIL_SENDER_NAME"),
     recipients,
     subjectPrefix: readEnv("BRIEFING_EMAIL_SUBJECT_PREFIX") ?? "[Global AI Daily Brief]",
     siteUrl: readEnv("BRIEFING_SITE_URL") ?? "https://lemon-sea-076f4910f.6.azurestaticapps.net",
