@@ -282,6 +282,52 @@ function parseMistralNewsroom(feed: RssFeedConfig, html: string): NormalizedArti
   return [...articles.values()].sort((left, right) => right.publishedAt.localeCompare(left.publishedAt));
 }
 
+function parseCohereChangelog(feed: RssFeedConfig, html: string): NormalizedArticle[] {
+  const frontmatterPattern = /"frontmatter":\{"title":"(?<title>[^"]+)","slug":"(?<slug>[^"]+)","type":"(?<type>[^"]*)","createdAt":"(?<createdAt>[^"]+)","hidden":(?<hidden>true|false),"description":"(?<description>[^"]*)"/g;
+  const articles = new Map<string, NormalizedArticle>();
+
+  for (const match of html.matchAll(frontmatterPattern)) {
+    const rawTitle = decodeHtmlEntities(match.groups?.title ?? "");
+    const rawSlug = decodeHtmlEntities(match.groups?.slug ?? "");
+    const rawDescription = decodeHtmlEntities(match.groups?.description ?? "");
+    const rawCreatedAt = decodeHtmlEntities(match.groups?.createdAt ?? "");
+    const hidden = match.groups?.hidden === "true";
+
+    if (hidden || !rawTitle || !rawSlug || !rawCreatedAt) {
+      continue;
+    }
+
+    const parsedDate = new Date(rawCreatedAt);
+    const publishedAt = Number.isNaN(parsedDate.getTime())
+      ? new Date().toISOString()
+      : parsedDate.toISOString();
+    const title = normalizeWhitespace(rawTitle);
+    const summary = normalizeWhitespace(rawDescription || `${title} was published in Cohere's official changelog.`);
+    const sourceUrl = `https://docs.cohere.com/${rawSlug.replace(/^\/+/, "")}`;
+
+    const article: NormalizedArticle = {
+      id: buildArticleId(feed, title, publishedAt),
+      title,
+      source: feed.source,
+      sourceUrl,
+      publishedAt,
+      summary,
+      content: summary,
+      type: feed.kind,
+      category: feed.category,
+      region: feed.region,
+      layer: feed.layer ?? (feed.kind === "research" ? "research" : "general-news"),
+      normalizedTitle: normalizeTitle(title),
+      feedId: feed.id,
+      ingestedAt: new Date().toISOString(),
+    };
+
+    articles.set(createArticleStoreKey(article), article);
+  }
+
+  return [...articles.values()].sort((left, right) => right.publishedAt.localeCompare(left.publishedAt));
+}
+
 async function ingestFeed(feed: RssFeedConfig): Promise<NormalizedArticle[]> {
   logger.info("Starting RSS feed ingestion.", { feedId: feed.id, url: feed.url });
   const body = await fetchFeedXml(feed);
@@ -298,6 +344,15 @@ async function ingestFeed(feed: RssFeedConfig): Promise<NormalizedArticle[]> {
   if (feed.format === "mistral-newsroom") {
     const normalizedArticles = parseMistralNewsroom(feed, body);
     logger.info("Completed Mistral newsroom ingestion.", {
+      feedId: feed.id,
+      discoveredArticles: normalizedArticles.length,
+    });
+    return normalizedArticles;
+  }
+
+  if (feed.format === "cohere-changelog") {
+    const normalizedArticles = parseCohereChangelog(feed, body);
+    logger.info("Completed Cohere changelog ingestion.", {
       feedId: feed.id,
       discoveredArticles: normalizedArticles.length,
     });

@@ -13,6 +13,7 @@ import { buildBriefingId, resolveBriefingDate, resolveBriefingEdition } from "..
 import { GeneratedBriefingValidationError, parseGeneratedBriefingPayload } from "../validation/generatedBriefingSchema.js";
 import { createLogger, type LogContext } from "../utils/logger.js";
 import { withRetry } from "../utils/retry.js";
+import { fetchGitHubTrendingSignals, type GitHubTrendingSignal } from "./githubTrendingSignalService.js";
 const logger = createLogger("briefing-generation");
 
 interface GenerateBriefingInput {
@@ -209,7 +210,10 @@ function getSourcePriority(article: NormalizedArticle): number {
   if (source.includes("anthropic")) return 3.45;
   if (source.includes("techcrunch")) return 3.5;
   if (source.includes("wired")) return 3.35;
+  if (source.includes("the verge")) return 3.3;
   if (source.includes("openai")) return 3.4;
+  if (source.includes("mistral")) return 3.35;
+  if (source.includes("cohere")) return 3.25;
   if (source.includes("microsoft")) return 3.3;
   if (source.includes("google")) return 3.2;
   if (source.includes("nvidia")) return 3.15;
@@ -260,6 +264,30 @@ function getRecencyPriority(article: NormalizedArticle): number {
   if (ageHours <= 72) return 2;
   if (ageHours <= 168) return 1;
   return 0;
+}
+
+function getGitHubTrendingSignalPriority(article: NormalizedArticle, signals: GitHubTrendingSignal[]): number {
+  if (signals.length === 0) {
+    return 0;
+  }
+
+  const text = normalizeText(`${article.title} ${article.summary} ${article.source}`);
+  let score = 0;
+
+  for (const signal of signals) {
+    const repoTokens = normalizeText(signal.repo).split(" ").filter((token) => token.length >= 3);
+    const matchedKeywordCount = signal.keywords.filter((keyword) => text.includes(normalizeText(keyword))).length;
+    const matchedRepoTokenCount = repoTokens.filter((token) => text.includes(token)).length;
+
+    if (matchedKeywordCount === 0 && matchedRepoTokenCount === 0) {
+      continue;
+    }
+
+    const popularityBoost = Math.min(1.2, signal.starsToday / 5000);
+    score += matchedKeywordCount * 0.16 + matchedRepoTokenCount * 0.22 + popularityBoost;
+  }
+
+  return Math.min(score, 2.2);
 }
 
 function getSignalPriority(article: NormalizedArticle): number {
@@ -411,7 +439,12 @@ function getOverlapPenalty(article: NormalizedArticle, priorCoverage: PriorCover
   return penalty;
 }
 
-function scoreArticle(article: NormalizedArticle, articles: NormalizedArticle[], priorCoverage: PriorCoverage): number {
+function scoreArticle(
+  article: NormalizedArticle,
+  articles: NormalizedArticle[],
+  priorCoverage: PriorCoverage,
+  trendingSignals: GitHubTrendingSignal[],
+): number {
   const overlapPenalty = getOverlapPenalty(article, priorCoverage);
   if (!Number.isFinite(overlapPenalty)) {
     return Number.NEGATIVE_INFINITY;
@@ -423,13 +456,19 @@ function scoreArticle(article: NormalizedArticle, articles: NormalizedArticle[],
     + getRecencyPriority(article)
     + getSignalPriority(article)
     + getMultiSourceValidationPriority(article, articles)
+    + getGitHubTrendingSignalPriority(article, trendingSignals)
     - overlapPenalty;
 }
 
-function selectArticlesForGeneration(articles: NormalizedArticle[], priorBriefings: Briefing[], date: string): NormalizedArticle[] {
+function selectArticlesForGeneration(
+  articles: NormalizedArticle[],
+  priorBriefings: Briefing[],
+  date: string,
+  trendingSignals: GitHubTrendingSignal[],
+): NormalizedArticle[] {
   const priorCoverage = buildPriorCoverage(priorBriefings, date);
   const rankedArticles = [...articles]
-    .map((article) => ({ article, score: scoreArticle(article, articles, priorCoverage) }))
+    .map((article) => ({ article, score: scoreArticle(article, articles, priorCoverage, trendingSignals) }))
     .filter((entry) => Number.isFinite(entry.score))
     .sort((left, right) => right.score - left.score)
     .map((entry) => entry.article);
@@ -784,9 +823,22 @@ export async function generateDailyBriefing(input: GenerateBriefingInput): Promi
   const date = resolveRequestDate(input.date);
   const edition = input.edition ?? resolveBriefingEdition();
   const startedAt = Date.now();
-  const selectedArticles = selectArticlesForGeneration(input.articles, input.priorBriefings ?? [], date);
+  const trendingSignals = await fetchGitHubTrendingSignals(input.logContext).catch((error) => {
+    scopedLogger.exception("Failed to fetch GitHub trending signals; continuing without community signal enrichment.", error, {
+      date,
+      edition,
+    });
+    return [];
+  });
+  const selectedArticles = selectArticlesForGeneration(input.articles, input.priorBriefings ?? [], date, trendingSignals);
   const selectedSources = [...new Set(selectedArticles.map((article) => article.source))];
   const selectedClusters = [...new Set(selectedArticles.map((article) => detectTopicCluster(article)))];
+  const matchedTrendingRepos = trendingSignals
+    .filter((signal) =>
+      selectedArticles.some((article) => getGitHubTrendingSignalPriority(article, [signal]) > 0),
+    )
+    .slice(0, 8)
+    .map((signal) => signal.repo);
   scopedLogger.info("Generating daily briefing.", {
     date,
     edition,
@@ -795,6 +847,8 @@ export async function generateDailyBriefing(input: GenerateBriefingInput): Promi
     priorBriefingCount: input.priorBriefings?.length ?? 0,
     selectedSources,
     selectedClusters,
+    trendingSignalCount: trendingSignals.length,
+    matchedTrendingRepos,
   });
   const generatedContent = await requestGeneratedBriefing(selectedArticles, date, input.logContext);
   let briefing = applyBriefingIdentity(

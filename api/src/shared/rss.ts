@@ -1,7 +1,7 @@
 import type { ArticleType, Category, Region } from "./contracts.js";
 
 export type FeedKind = ArticleType;
-export type FeedFormat = "rss" | "anthropic-newsroom" | "mistral-newsroom";
+export type FeedFormat = "rss" | "anthropic-newsroom" | "mistral-newsroom" | "cohere-changelog";
 export type FeedLayer = "general-news" | "specialist-news" | "official" | "research";
 
 export interface RssFeedConfig {

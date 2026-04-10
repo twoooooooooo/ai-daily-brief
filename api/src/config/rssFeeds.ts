@@ -74,6 +74,17 @@ export const rssFeeds: RssFeedConfig[] = [
     region: "Europe",
   },
   {
+    id: "cohere-changelog",
+    name: "Cohere Release Notes",
+    source: "Cohere",
+    url: "https://docs.cohere.com/changelog",
+    format: "cohere-changelog",
+    layer: "official",
+    kind: "news",
+    category: "Model",
+    region: "US",
+  },
+  {
     id: "microsoft-official-blog",
     name: "Microsoft Official Blog",
     source: "Microsoft",
