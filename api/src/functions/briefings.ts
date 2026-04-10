@@ -8,6 +8,7 @@ import { getSubscriberStats } from "../repositories/subscriberStore.js";
 import { getBriefingEmailSettings, getDailyBriefingScheduleSettings } from "../config/runtimeConfig.js";
 import { getLatestDailyBriefingJob } from "../services/dailyBriefingJobService.js";
 import { getLatestBriefingEmailJob } from "../services/briefingEmailJobService.js";
+import type { Briefing, Issue } from "../shared/contracts.js";
 
 async function handleRequest(
   context: InvocationContext,
@@ -55,6 +56,54 @@ function createEmptyBriefingResponse(): BriefingResponse {
     },
     trendingTopics: [],
     trendingTopicsEn: [],
+  };
+}
+
+function summarizeCounts<T extends string>(values: T[]): Array<{ key: T; count: number }> {
+  const counts = new Map<T, number>();
+
+  for (const value of values) {
+    counts.set(value, (counts.get(value) ?? 0) + 1);
+  }
+
+  return [...counts.entries()]
+    .sort((left, right) => right[1] - left[1])
+    .map(([key, count]) => ({ key, count }));
+}
+
+function buildLatestBriefingTelemetry(briefing: Briefing) {
+  const articles: Issue[] = [...briefing.issues, ...briefing.researchHighlights];
+  const publishedDates = articles
+    .map((article) => new Date(`${article.date}T00:00:00.000Z`))
+    .filter((value) => !Number.isNaN(value.getTime()));
+  const articleAges = publishedDates.map((value) => Math.max(0, (Date.now() - value.getTime()) / 36e5));
+  const averageAgeHours = articleAges.length > 0
+    ? Math.round((articleAges.reduce((sum, value) => sum + value, 0) / articleAges.length) * 10) / 10
+    : undefined;
+  const newest = publishedDates.length > 0
+    ? new Date(Math.max(...publishedDates.map((value) => value.getTime()))).toISOString()
+    : undefined;
+  const oldest = publishedDates.length > 0
+    ? new Date(Math.min(...publishedDates.map((value) => value.getTime()))).toISOString()
+    : undefined;
+
+  return {
+    freshness: {
+      newestArticlePublishedAt: newest,
+      oldestArticlePublishedAt: oldest,
+      averageAgeHours,
+      staleArticleCount: articleAges.filter((age) => age > 48).length,
+      articlesWithin24Hours: articleAges.filter((age) => age <= 24).length,
+    },
+    coverage: {
+      sourceCounts: summarizeCounts(articles.map((article) => article.source))
+        .slice(0, 8)
+        .map((entry) => ({ source: entry.key, count: entry.count })),
+      categoryCounts: summarizeCounts(articles.map((article) => article.category))
+        .map((entry) => ({ category: entry.key, count: entry.count })),
+      typeCounts: summarizeCounts(articles.map((article) => article.type))
+        .map((entry) => ({ type: entry.key, count: entry.count })),
+    },
   };
 }
 
@@ -163,6 +212,7 @@ export async function getOperationalStatusHandler(
         updatedAt: latestBriefing.lastUpdatedAt,
         issueCount: latestBriefing.issues.length,
         researchHighlightCount: latestBriefing.researchHighlights.length,
+        ...buildLatestBriefingTelemetry(latestBriefing),
       } : undefined,
       latestJob: latestJob ? {
         id: latestJob.id,

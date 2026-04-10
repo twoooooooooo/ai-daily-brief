@@ -94,6 +94,27 @@ export interface BriefingOperationalStatus {
     updatedAt?: string;
     issueCount: number;
     researchHighlightCount: number;
+    freshness?: {
+      newestArticlePublishedAt?: string;
+      oldestArticlePublishedAt?: string;
+      averageAgeHours?: number;
+      staleArticleCount: number;
+      articlesWithin24Hours: number;
+    };
+    coverage?: {
+      sourceCounts: Array<{
+        source: string;
+        count: number;
+      }>;
+      categoryCounts: Array<{
+        category: Category;
+        count: number;
+      }>;
+      typeCounts: Array<{
+        type: ArticleType;
+        count: number;
+      }>;
+    };
   };
   latestJob?: {
     id: string;
