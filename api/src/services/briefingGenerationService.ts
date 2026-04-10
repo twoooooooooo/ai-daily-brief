@@ -14,6 +14,7 @@ import { GeneratedBriefingValidationError, parseGeneratedBriefingPayload } from 
 import { createLogger, type LogContext } from "../utils/logger.js";
 import { withRetry } from "../utils/retry.js";
 import { fetchGitHubTrendingSignals, type GitHubTrendingSignal } from "./githubTrendingSignalService.js";
+import { recordBriefingSelectionDiagnostics } from "./briefingSelectionDiagnosticsService.js";
 const logger = createLogger("briefing-generation");
 
 interface GenerateBriefingInput {
@@ -228,6 +229,25 @@ function getSourcePriority(article: NormalizedArticle): number {
   return 2;
 }
 
+function getSourceReason(article: NormalizedArticle): string | null {
+  const source = article.source.toLowerCase();
+
+  if (source.includes("anthropic") || source.includes("openai") || source.includes("mistral") || source.includes("cohere")) {
+    return "공식 AI 기업 발표 소스";
+  }
+  if (source.includes("mit technology review") || source.includes("wired") || source.includes("techcrunch") || source.includes("the verge")) {
+    return "영향력 있는 글로벌 미디어 소스";
+  }
+  if (source.includes("ai news") || source.includes("hugging face")) {
+    return "전문 AI 매체/플랫폼 소스";
+  }
+  if (source.includes("arxiv")) {
+    return "연구/논문 소스";
+  }
+
+  return null;
+}
+
 function getLayerPriority(article: NormalizedArticle): number {
   switch (article.layer) {
     case "official":
@@ -262,6 +282,25 @@ function getCategoryPriority(article: NormalizedArticle): number {
   }
 }
 
+function getCategoryReason(article: NormalizedArticle): string | null {
+  switch (article.category) {
+    case "Policy":
+      return "정책/규제 영향도가 큰 주제";
+    case "Investment":
+      return "투자/시장 파급력이 큰 주제";
+    case "Infrastructure":
+      return "칩·데이터센터·인프라 관련 핵심 주제";
+    case "Product":
+      return "제품/서비스 출시 관련 주제";
+    case "Model":
+      return "모델/플랫폼 변화 관련 주제";
+    case "Research":
+      return "연구 레이어 보강용 주제";
+    default:
+      return null;
+  }
+}
+
 function getRecencyPriority(article: NormalizedArticle): number {
   const ageHours = Math.max(0, (Date.now() - new Date(article.publishedAt).getTime()) / 36e5);
   if (article.type === "research") {
@@ -277,6 +316,20 @@ function getRecencyPriority(article: NormalizedArticle): number {
   if (ageHours <= MAX_NEWS_AGE_HOURS) return 0.2;
   if (ageHours <= 72) return -2.5;
   return -5;
+}
+
+function getRecencyReason(article: NormalizedArticle): string | null {
+  const ageHours = Math.max(0, (Date.now() - new Date(article.publishedAt).getTime()) / 36e5);
+  if (article.type === "research") {
+    if (ageHours <= 72) return "최근 며칠 내 나온 연구";
+    if (ageHours <= MAX_RESEARCH_AGE_HOURS) return "최근 일주일 내 연구";
+    return null;
+  }
+
+  if (ageHours <= 12) return "아주 최신 뉴스";
+  if (ageHours <= 24) return "최근 24시간 내 뉴스";
+  if (ageHours <= 48) return "최근 48시간 내 뉴스";
+  return null;
 }
 
 function getGitHubTrendingSignalPriority(article: NormalizedArticle, signals: GitHubTrendingSignal[]): number {
@@ -308,6 +361,14 @@ function getSignalPriority(article: NormalizedArticle): number {
   return PRIORITY_SIGNAL_KEYWORDS.reduce((score, signal) => score + (text.includes(signal) ? 0.28 : 0), 0);
 }
 
+function getSignalReasons(article: NormalizedArticle): string[] {
+  const text = `${article.title} ${article.summary}`.toLowerCase();
+  return PRIORITY_SIGNAL_KEYWORDS
+    .filter((signal) => text.includes(signal))
+    .slice(0, 4)
+    .map((signal) => `핵심 신호 포함: ${signal}`);
+}
+
 function getMultiSourceValidationPriority(article: NormalizedArticle, articles: NormalizedArticle[]): number {
   const normalizedTitle = normalizeText(article.title);
   const titleTokens = normalizedTitle.split(" ").filter((token) => token.length >= 4);
@@ -329,6 +390,29 @@ function getMultiSourceValidationPriority(article: NormalizedArticle, articles: 
   if (corroboratingSources.size >= 2) return 0.9;
   if (corroboratingSources.size === 1) return 0.45;
   return 0;
+}
+
+function getMultiSourceValidationReason(article: NormalizedArticle, articles: NormalizedArticle[]): string | null {
+  const normalizedTitle = normalizeText(article.title);
+  const titleTokens = normalizedTitle.split(" ").filter((token) => token.length >= 4);
+
+  if (titleTokens.length === 0) {
+    return null;
+  }
+
+  const corroboratingSources = new Set(
+    articles
+      .filter((candidate) => candidate.id !== article.id && candidate.source !== article.source)
+      .filter((candidate) => {
+        const candidateText = normalizeText(`${candidate.title} ${candidate.summary}`);
+        return titleTokens.some((token) => candidateText.includes(token));
+      })
+      .map((candidate) => candidate.source),
+  );
+
+  if (corroboratingSources.size >= 2) return "여러 소스가 비슷한 이슈를 다룸";
+  if (corroboratingSources.size === 1) return "다른 소스에서도 같은 흐름이 확인됨";
+  return null;
 }
 
 function detectTopicCluster(article: NormalizedArticle): string {
@@ -363,6 +447,7 @@ interface ArticleScoreBreakdown {
   freshnessScore: number;
   totalScore: number;
   cluster: string;
+  reasons: string[];
 }
 
 function buildPriorCoverage(priorBriefings: Briefing[], date: string): PriorCoverage {
@@ -488,6 +573,13 @@ function scoreArticleBreakdown(
     + getGitHubTrendingSignalPriority(article, trendingSignals);
   const freshnessScore = getRecencyPriority(article);
   const totalScore = impactScore + freshnessScore - overlapPenalty;
+  const reasons = [
+    getRecencyReason(article),
+    getSourceReason(article),
+    getCategoryReason(article),
+    getMultiSourceValidationReason(article, articles),
+    ...getSignalReasons(article),
+  ].filter((reason): reason is string => Boolean(reason));
 
   return {
     article,
@@ -495,6 +587,7 @@ function scoreArticleBreakdown(
     freshnessScore,
     totalScore,
     cluster: detectTopicCluster(article),
+    reasons: [...new Set(reasons)].slice(0, 5),
   };
 }
 
@@ -909,6 +1002,9 @@ export async function generateDailyBriefing(input: GenerateBriefingInput): Promi
   const startedAt = Date.now();
   const freshNewsArticles = input.articles.filter((article) => article.type !== "research" && isFreshEnoughForGeneration(article));
   const freshResearchArticles = input.articles.filter((article) => article.type === "research" && isFreshEnoughForGeneration(article));
+  const candidateArticles = [...freshNewsArticles, ...freshResearchArticles].length > 0
+    ? [...freshNewsArticles, ...freshResearchArticles]
+    : input.articles;
   const trendingSignals = await fetchGitHubTrendingSignals(input.logContext).catch((error) => {
     scopedLogger.exception("Failed to fetch GitHub trending signals; continuing without community signal enrichment.", error, {
       date,
@@ -937,6 +1033,28 @@ export async function generateDailyBriefing(input: GenerateBriefingInput): Promi
     selectedClusters,
     trendingSignalCount: trendingSignals.length,
     matchedTrendingRepos,
+  });
+  const diagnosticArticles = [...candidateArticles]
+    .map((article) => scoreArticleBreakdown(article, input.articles, buildPriorCoverage(input.priorBriefings ?? [], date), trendingSignals))
+    .filter((entry): entry is ArticleScoreBreakdown => entry !== null);
+  recordBriefingSelectionDiagnostics({
+    date,
+    edition,
+    selectedArticleCount: selectedArticles.length,
+    entries: diagnosticArticles
+      .filter((entry) => selectedArticles.some((article) => article.id === entry.article.id))
+      .sort((left, right) => right.totalScore - left.totalScore)
+      .map((entry) => ({
+        id: entry.article.id,
+        title: entry.article.title,
+        source: entry.article.source,
+        publishedAt: entry.article.publishedAt,
+        cluster: entry.cluster,
+        impactScore: Math.round(entry.impactScore * 100) / 100,
+        freshnessScore: Math.round(entry.freshnessScore * 100) / 100,
+        totalScore: Math.round(entry.totalScore * 100) / 100,
+        reasons: entry.reasons,
+      })),
   });
   const generatedContent = await requestGeneratedBriefing(selectedArticles, date, input.logContext);
   let briefing = applyBriefingIdentity(

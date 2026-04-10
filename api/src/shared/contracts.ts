@@ -135,4 +135,21 @@ export interface BriefingOperationalStatus {
     reason?: string;
     error?: string;
   };
+  latestSelection?: {
+    updatedAt: string;
+    date: string;
+    edition: BriefingEdition;
+    selectedArticleCount: number;
+    entries: Array<{
+      id: string;
+      title: string;
+      source: string;
+      publishedAt: string;
+      cluster: string;
+      impactScore: number;
+      freshnessScore: number;
+      totalScore: number;
+      reasons: string[];
+    }>;
+  };
 }
