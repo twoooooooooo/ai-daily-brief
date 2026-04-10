@@ -19,6 +19,7 @@ export interface Issue {
   keywords: string[];
   source: string;
   sourceUrl: string;
+  sourcePublishedAt?: string;
   region: Region;
   date: string;
   type: ArticleType;

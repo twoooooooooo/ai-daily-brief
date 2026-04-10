@@ -75,7 +75,7 @@ function summarizeCounts<T extends string>(values: T[]): Array<{ key: T; count: 
 function buildLatestBriefingTelemetry(briefing: Briefing) {
   const articles: Issue[] = [...briefing.issues, ...briefing.researchHighlights];
   const publishedDates = articles
-    .map((article) => new Date(`${article.date}T00:00:00.000Z`))
+    .map((article) => new Date(article.sourcePublishedAt ?? `${article.date}T00:00:00.000Z`))
     .filter((value) => !Number.isNaN(value.getTime()));
   const articleAges = publishedDates.map((value) => Math.max(0, (Date.now() - value.getTime()) / 36e5));
   const averageAgeHours = articleAges.length > 0

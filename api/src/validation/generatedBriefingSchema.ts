@@ -101,6 +101,9 @@ function normalizeIssue(item: unknown, date: string): Issue {
     keywords: ensureStringArray(item.keywords, "issue.keywords"),
     source: ensureString(item.source, "issue.source"),
     sourceUrl: ensureString(item.sourceUrl, "issue.sourceUrl"),
+    sourcePublishedAt: typeof item.sourcePublishedAt === "string" && item.sourcePublishedAt.trim()
+      ? item.sourcePublishedAt.trim()
+      : undefined,
     region: ensureRegion(item.region, "issue.region"),
     date: typeof item.date === "string" && item.date.trim() ? item.date.trim() : date,
     type: ensureType(item.type, "issue.type"),

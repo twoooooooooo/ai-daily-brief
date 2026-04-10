@@ -93,6 +93,7 @@ function cloneEnglishFieldsIntoLocalizedShape(briefing: Briefing): Briefing {
       summaryEn: issue.summaryEn || issue.summary,
       whyItMattersEn: issue.whyItMattersEn || issue.whyItMatters,
       practicalImpactEn: issue.practicalImpactEn || issue.practicalImpact,
+      sourcePublishedAt: issue.sourcePublishedAt,
     })),
     researchHighlights: briefing.researchHighlights.map((issue) => ({
       ...issue,
@@ -100,10 +101,30 @@ function cloneEnglishFieldsIntoLocalizedShape(briefing: Briefing): Briefing {
       summaryEn: issue.summaryEn || issue.summary,
       whyItMattersEn: issue.whyItMattersEn || issue.whyItMatters,
       practicalImpactEn: issue.practicalImpactEn || issue.practicalImpact,
+      sourcePublishedAt: issue.sourcePublishedAt,
     })),
     trendingTopicsEn: briefing.trendingTopicsEn.length > 0
       ? [...briefing.trendingTopicsEn]
       : [...briefing.trendingTopics],
+  };
+}
+
+function enrichBriefingWithSourcePublishedAt(briefing: Briefing, selectedArticles: NormalizedArticle[]): Briefing {
+  const articleById = new Map(selectedArticles.map((article) => [article.id, article]));
+  const articleByUrl = new Map(selectedArticles.map((article) => [article.sourceUrl, article]));
+
+  const enrichIssue = <T extends Briefing["issues"][number]>(issue: T): T => {
+    const matchedArticle = articleById.get(issue.id) ?? articleByUrl.get(issue.sourceUrl);
+    return {
+      ...issue,
+      sourcePublishedAt: matchedArticle?.publishedAt ?? issue.sourcePublishedAt,
+    };
+  };
+
+  return {
+    ...briefing,
+    issues: briefing.issues.map((issue) => enrichIssue(issue)),
+    researchHighlights: briefing.researchHighlights.map((issue) => enrichIssue(issue)),
   };
 }
 
@@ -1062,6 +1083,7 @@ export async function generateDailyBriefing(input: GenerateBriefingInput): Promi
     date,
     edition,
   );
+  briefing = enrichBriefingWithSourcePublishedAt(briefing, selectedArticles);
 
   if (needsKoreanLocalization(briefing)) {
     scopedLogger.info("Applying Korean display-field localization pass to generated briefing.", {
