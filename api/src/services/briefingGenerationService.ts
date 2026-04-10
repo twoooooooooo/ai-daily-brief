@@ -210,7 +210,9 @@ function getSourcePriority(article: NormalizedArticle): number {
   if (source.includes("anthropic")) return 3.45;
   if (source.includes("techcrunch")) return 3.5;
   if (source.includes("wired")) return 3.35;
+  if (source.includes("mit technology review")) return 3.4;
   if (source.includes("the verge")) return 3.3;
+  if (source.includes("ai news")) return 3.25;
   if (source.includes("openai")) return 3.4;
   if (source.includes("mistral")) return 3.35;
   if (source.includes("cohere")) return 3.25;

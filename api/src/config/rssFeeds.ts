@@ -43,6 +43,16 @@ export const rssFeeds: RssFeedConfig[] = [
     region: "US",
   },
   {
+    id: "mit-technology-review-ai",
+    name: "MIT Technology Review AI",
+    source: "MIT Technology Review",
+    url: "https://www.technologyreview.com/topic/artificial-intelligence/feed/",
+    layer: "general-news",
+    kind: "news",
+    category: "Policy",
+    region: "US",
+  },
+  {
     id: "the-verge-ai",
     name: "The Verge AI",
     source: "The Verge",
@@ -132,6 +142,16 @@ export const rssFeeds: RssFeedConfig[] = [
     layer: "specialist-news",
     kind: "news",
     category: "Model",
+    region: "Europe",
+  },
+  {
+    id: "ai-news",
+    name: "AI News",
+    source: "AI News",
+    url: "https://www.artificialintelligence-news.com/feed/",
+    layer: "specialist-news",
+    kind: "news",
+    category: "Product",
     region: "Europe",
   },
   {
