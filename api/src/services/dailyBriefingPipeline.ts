@@ -60,37 +60,39 @@ export async function runDailyBriefingPipeline(
       cachedArticleCount: cachedArticles.length,
       rssStage: "cache",
     });
-  } else if (cachedArticles.length > 0) {
-    scopedLogger.info("Using cached RSS articles for daily briefing pipeline.", {
-      date: targetDate,
-      cachedArticleCount: cachedArticles.length,
-      rssStage: "cache",
-    });
   } else {
-    let ingestionResult;
     try {
-      ingestionResult = await ingestConfiguredRssFeeds({
+      const ingestionResult = await ingestConfiguredRssFeeds({
         ...input.logContext,
         component: "rss-ingestion",
         operationName: "ingestConfiguredRssFeeds",
         correlationId,
       });
-    } catch (error) {
-      scopedLogger.exception("Daily briefing pipeline failed during RSS ingestion.", error, {
-        stage: "rss-ingestion",
-        date: targetDate,
-      });
-      throw new DailyBriefingPipelineError("Daily briefing pipeline failed during RSS ingestion.", error);
-    }
 
-    articles = ingestionResult.articles;
-    scopedLogger.info("Completed RSS ingestion for daily briefing pipeline.", {
-      date: targetDate,
-      feedCount: ingestionResult.feedsProcessed,
-      uniqueArticles: ingestionResult.uniqueArticles,
-      discoveredArticles: ingestionResult.articlesDiscovered,
-      rssStage: "network",
-    });
+      articles = ingestionResult.articles;
+      scopedLogger.info("Completed fresh RSS ingestion for daily briefing pipeline.", {
+        date: targetDate,
+        feedCount: ingestionResult.feedsProcessed,
+        uniqueArticles: ingestionResult.uniqueArticles,
+        discoveredArticles: ingestionResult.articlesDiscovered,
+        rssStage: "network",
+      });
+    } catch (error) {
+      if (cachedArticles.length > 0) {
+        scopedLogger.exception("Fresh RSS ingestion failed; falling back to cached RSS articles.", error, {
+          stage: "rss-ingestion-fallback",
+          date: targetDate,
+          cachedArticleCount: cachedArticles.length,
+        });
+        articles = cachedArticles;
+      } else {
+        scopedLogger.exception("Daily briefing pipeline failed during RSS ingestion.", error, {
+          stage: "rss-ingestion",
+          date: targetDate,
+        });
+        throw new DailyBriefingPipelineError("Daily briefing pipeline failed during RSS ingestion.", error);
+      }
+    }
   }
 
   let briefing: Briefing;

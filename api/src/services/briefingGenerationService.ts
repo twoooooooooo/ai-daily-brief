@@ -25,6 +25,8 @@ interface GenerateBriefingInput {
 }
 
 const MAX_GENERATION_ARTICLES = 16;
+const MAX_NEWS_AGE_HOURS = 48;
+const MAX_RESEARCH_AGE_HOURS = 168;
 const PRIORITY_SIGNAL_KEYWORDS = [
   "launch", "released", "release", "announced", "announcement", "introducing", "funding", "raises",
   "acquire", "acquisition", "partnership", "policy", "regulation", "senate", "court", "ipo",
@@ -262,10 +264,19 @@ function getCategoryPriority(article: NormalizedArticle): number {
 
 function getRecencyPriority(article: NormalizedArticle): number {
   const ageHours = Math.max(0, (Date.now() - new Date(article.publishedAt).getTime()) / 36e5);
+  if (article.type === "research") {
+    if (ageHours <= 24) return 2.6;
+    if (ageHours <= 72) return 1.7;
+    if (ageHours <= MAX_RESEARCH_AGE_HOURS) return 0.8;
+    return -1.2;
+  }
+
+  if (ageHours <= 12) return 4;
   if (ageHours <= 24) return 3;
-  if (ageHours <= 72) return 2;
-  if (ageHours <= 168) return 1;
-  return 0;
+  if (ageHours <= 36) return 1.5;
+  if (ageHours <= MAX_NEWS_AGE_HOURS) return 0.2;
+  if (ageHours <= 72) return -2.5;
+  return -5;
 }
 
 function getGitHubTrendingSignalPriority(article: NormalizedArticle, signals: GitHubTrendingSignal[]): number {
@@ -441,6 +452,15 @@ function getOverlapPenalty(article: NormalizedArticle, priorCoverage: PriorCover
   return penalty;
 }
 
+function isFreshEnoughForGeneration(article: NormalizedArticle): boolean {
+  const ageHours = Math.max(0, (Date.now() - new Date(article.publishedAt).getTime()) / 36e5);
+  if (article.type === "research") {
+    return ageHours <= MAX_RESEARCH_AGE_HOURS;
+  }
+
+  return ageHours <= MAX_NEWS_AGE_HOURS;
+}
+
 function scoreArticle(
   article: NormalizedArticle,
   articles: NormalizedArticle[],
@@ -469,7 +489,9 @@ function selectArticlesForGeneration(
   trendingSignals: GitHubTrendingSignal[],
 ): NormalizedArticle[] {
   const priorCoverage = buildPriorCoverage(priorBriefings, date);
-  const rankedArticles = [...articles]
+  const freshArticles = articles.filter(isFreshEnoughForGeneration);
+  const candidateArticles = freshArticles.length > 0 ? freshArticles : articles;
+  const rankedArticles = [...candidateArticles]
     .map((article) => ({ article, score: scoreArticle(article, articles, priorCoverage, trendingSignals) }))
     .filter((entry) => Number.isFinite(entry.score))
     .sort((left, right) => right.score - left.score)
@@ -825,6 +847,8 @@ export async function generateDailyBriefing(input: GenerateBriefingInput): Promi
   const date = resolveRequestDate(input.date);
   const edition = input.edition ?? resolveBriefingEdition();
   const startedAt = Date.now();
+  const freshNewsArticles = input.articles.filter((article) => article.type !== "research" && isFreshEnoughForGeneration(article));
+  const freshResearchArticles = input.articles.filter((article) => article.type === "research" && isFreshEnoughForGeneration(article));
   const trendingSignals = await fetchGitHubTrendingSignals(input.logContext).catch((error) => {
     scopedLogger.exception("Failed to fetch GitHub trending signals; continuing without community signal enrichment.", error, {
       date,
@@ -845,6 +869,8 @@ export async function generateDailyBriefing(input: GenerateBriefingInput): Promi
     date,
     edition,
     articleCount: input.articles.length,
+    freshNewsArticleCount: freshNewsArticles.length,
+    freshResearchArticleCount: freshResearchArticles.length,
     selectedArticleCount: selectedArticles.length,
     priorBriefingCount: input.priorBriefings?.length ?? 0,
     selectedSources,
