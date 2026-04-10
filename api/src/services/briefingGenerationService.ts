@@ -357,6 +357,14 @@ interface PriorCoverage {
   recentTopicClusters: Set<string>;
 }
 
+interface ArticleScoreBreakdown {
+  article: NormalizedArticle;
+  impactScore: number;
+  freshnessScore: number;
+  totalScore: number;
+  cluster: string;
+}
+
 function buildPriorCoverage(priorBriefings: Briefing[], date: string): PriorCoverage {
   const hardExcludedIds = new Set<string>();
   const hardExcludedUrls = new Set<string>();
@@ -461,25 +469,56 @@ function isFreshEnoughForGeneration(article: NormalizedArticle): boolean {
   return ageHours <= MAX_NEWS_AGE_HOURS;
 }
 
-function scoreArticle(
+function scoreArticleBreakdown(
   article: NormalizedArticle,
   articles: NormalizedArticle[],
   priorCoverage: PriorCoverage,
   trendingSignals: GitHubTrendingSignal[],
-): number {
+): ArticleScoreBreakdown | null {
   const overlapPenalty = getOverlapPenalty(article, priorCoverage);
   if (!Number.isFinite(overlapPenalty)) {
-    return Number.NEGATIVE_INFINITY;
+    return null;
   }
 
-  return getSourcePriority(article)
+  const impactScore = getSourcePriority(article)
     + getLayerPriority(article)
     + getCategoryPriority(article)
-    + getRecencyPriority(article)
     + getSignalPriority(article)
     + getMultiSourceValidationPriority(article, articles)
-    + getGitHubTrendingSignalPriority(article, trendingSignals)
-    - overlapPenalty;
+    + getGitHubTrendingSignalPriority(article, trendingSignals);
+  const freshnessScore = getRecencyPriority(article);
+  const totalScore = impactScore + freshnessScore - overlapPenalty;
+
+  return {
+    article,
+    impactScore,
+    freshnessScore,
+    totalScore,
+    cluster: detectTopicCluster(article),
+  };
+}
+
+function seedClusterRepresentatives(scoredArticles: ArticleScoreBreakdown[]): ArticleScoreBreakdown[] {
+  const representatives = new Map<string, ArticleScoreBreakdown>();
+
+  for (const scored of scoredArticles) {
+    const existing = representatives.get(scored.cluster);
+    if (!existing || scored.totalScore > existing.totalScore) {
+      representatives.set(scored.cluster, scored);
+    }
+  }
+
+  return [...representatives.values()].sort((left, right) => {
+    if (right.totalScore !== left.totalScore) {
+      return right.totalScore - left.totalScore;
+    }
+
+    if (right.freshnessScore !== left.freshnessScore) {
+      return right.freshnessScore - left.freshnessScore;
+    }
+
+    return right.impactScore - left.impactScore;
+  });
 }
 
 function selectArticlesForGeneration(
@@ -491,11 +530,22 @@ function selectArticlesForGeneration(
   const priorCoverage = buildPriorCoverage(priorBriefings, date);
   const freshArticles = articles.filter(isFreshEnoughForGeneration);
   const candidateArticles = freshArticles.length > 0 ? freshArticles : articles;
-  const rankedArticles = [...candidateArticles]
-    .map((article) => ({ article, score: scoreArticle(article, articles, priorCoverage, trendingSignals) }))
-    .filter((entry) => Number.isFinite(entry.score))
-    .sort((left, right) => right.score - left.score)
-    .map((entry) => entry.article);
+  const scoredArticles = [...candidateArticles]
+    .map((article) => scoreArticleBreakdown(article, articles, priorCoverage, trendingSignals))
+    .filter((entry): entry is ArticleScoreBreakdown => entry !== null)
+    .sort((left, right) => {
+      if (right.totalScore !== left.totalScore) {
+        return right.totalScore - left.totalScore;
+      }
+
+      if (right.freshnessScore !== left.freshnessScore) {
+        return right.freshnessScore - left.freshnessScore;
+      }
+
+      return right.impactScore - left.impactScore;
+    });
+  const rankedArticles = scoredArticles.map((entry) => entry.article);
+  const clusterRepresentatives = seedClusterRepresentatives(scoredArticles);
 
   const selected: NormalizedArticle[] = [];
   const sourceCounts = new Map<string, number>();
@@ -555,13 +605,23 @@ function selectArticlesForGeneration(
       break;
     }
 
-    const candidate = rankedArticles.find((article) =>
-      article.layer === layer && !selected.some((selectedArticle) => selectedArticle.id === article.id),
+    const candidate = clusterRepresentatives.find((entry) =>
+      entry.article.layer === layer && !selected.some((selectedArticle) => selectedArticle.id === entry.article.id),
     );
 
     if (candidate) {
-      addArticle(candidate);
+      addArticle(candidate.article);
     }
+  }
+
+  for (const representative of clusterRepresentatives) {
+    if (selected.length >= MAX_GENERATION_ARTICLES) {
+      break;
+    }
+    if (selected.some((selectedArticle) => selectedArticle.id === representative.article.id)) {
+      continue;
+    }
+    addArticle(representative.article);
   }
 
   for (const article of rankedArticles) {
