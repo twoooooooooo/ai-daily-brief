@@ -24,6 +24,33 @@ function buildSubject(briefing: Briefing, subjectPrefix: string): string {
   return `${subjectPrefix} ${briefing.date} ${getEditionLabel(briefing.edition)} Edition`;
 }
 
+function getImportanceBadgeStyles(importance: Briefing["issues"][number]["importance"]): {
+  background: string;
+  border: string;
+  color: string;
+} {
+  switch (importance) {
+    case "High":
+      return {
+        background: "#FEE2E2",
+        border: "#FCA5A5",
+        color: "#991B1B",
+      };
+    case "Medium":
+      return {
+        background: "#FEF3C7",
+        border: "#FCD34D",
+        color: "#92400E",
+      };
+    default:
+      return {
+        background: "#DBEAFE",
+        border: "#93C5FD",
+        color: "#1E3A8A",
+      };
+  }
+}
+
 function buildBriefingLink(siteUrl: string, briefing: Briefing): string {
   const baseUrl = siteUrl.replace(/\/+$/, "");
   return `${baseUrl}/archive/${encodeURIComponent(briefing.id)}`;
@@ -69,16 +96,22 @@ function buildHtmlBody(briefing: Briefing, siteUrl: string, unsubscribeUrl: stri
       minute: "2-digit",
     })
     : null;
-  const articleMarkup = articles.slice(0, 8).map((article) => `
+  const articleMarkup = articles.slice(0, 8).map((article) => {
+    const importanceBadge = getImportanceBadgeStyles(article.importance);
+    return `
     <div style="padding:22px 22px 20px;border:1px solid #E5E7EB;border-radius:18px;background:#FFFFFF;margin-bottom:14px;">
-      <div style="font-size:12px;color:#64748B;margin-bottom:10px;letter-spacing:0.04em;">${escapeHtml(article.source)} · ${escapeHtml(article.category)} · ${escapeHtml(article.importance)}</div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+        <span style="font-size:12px;color:#64748B;letter-spacing:0.04em;">${escapeHtml(article.source)} · ${escapeHtml(article.category)}</span>
+        <span style="display:inline-block;padding:4px 10px;border-radius:999px;background:${importanceBadge.background};border:1px solid ${importanceBadge.border};color:${importanceBadge.color};font-size:11px;font-weight:800;letter-spacing:0.06em;text-transform:uppercase;">${escapeHtml(article.importance)}</span>
+      </div>
       <div style="font-size:21px;line-height:1.4;font-weight:700;color:#0F172A;margin-bottom:10px;">${escapeHtml(article.title)}</div>
       <div style="font-size:14px;line-height:1.75;color:#334155;margin-bottom:12px;">${escapeHtml(article.summary)}</div>
       <div style="font-size:13px;line-height:1.75;color:#0F172A;margin-bottom:8px;"><strong>Why it matters:</strong> ${escapeHtml(article.whyItMatters)}</div>
       <div style="font-size:13px;line-height:1.75;color:#0F172A;margin-bottom:14px;"><strong>Practical impact:</strong> ${escapeHtml(article.practicalImpact)}</div>
       <a href="${escapeHtml(article.sourceUrl)}" style="display:inline-block;font-size:13px;color:#1D4ED8;text-decoration:none;font-weight:700;">Read source</a>
     </div>
-  `).join("");
+  `;
+  }).join("");
 
   return `
     <div style="margin:0;padding:28px;background:#EEF2F7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,Helvetica,sans-serif;color:#0F172A;">
@@ -116,7 +149,7 @@ function buildHtmlBody(briefing: Briefing, siteUrl: string, unsubscribeUrl: stri
             </div>
             <div style="flex:1 1 180px;min-width:180px;padding:16px 18px;border-radius:18px;background:#F8FAFC;border:1px solid #CBD5E1;">
               <div style="font-size:10px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;color:#475569;margin-bottom:6px;">Top Mention</div>
-              <div style="font-size:24px;font-weight:700;color:#0F172A;">${escapeHtml(briefing.dailySummary.topMention)}</div>
+              <div style="font-size:19px;font-weight:700;color:#0F172A;line-height:1.35;">${escapeHtml(briefing.dailySummary.topMention)}</div>
             </div>
           </div>
           ${articleMarkup}
