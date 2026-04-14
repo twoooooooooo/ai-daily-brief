@@ -3,6 +3,7 @@ import { getBriefingEmailSettings } from "../config/runtimeConfig.js";
 import { listActiveSubscribers } from "../repositories/subscriberStore.js";
 import type { Briefing } from "../shared/contracts.js";
 import { createLogger, type LogContext } from "../utils/logger.js";
+import { buildRecipientUnsubscribeLink } from "./subscriptionEmailService.js";
 
 const logger = createLogger("briefing-email");
 
@@ -28,7 +29,7 @@ function buildBriefingLink(siteUrl: string, briefing: Briefing): string {
   return `${baseUrl}/archive/${encodeURIComponent(briefing.id)}`;
 }
 
-function buildPlainTextBody(briefing: Briefing, siteUrl: string): string {
+function buildPlainTextBody(briefing: Briefing, siteUrl: string, unsubscribeUrl: string): string {
   const articles = [...briefing.issues, ...briefing.researchHighlights];
   const briefingLink = buildBriefingLink(siteUrl, briefing);
   const lines = [
@@ -41,6 +42,7 @@ function buildPlainTextBody(briefing: Briefing, siteUrl: string): string {
     "",
     `View full briefing: ${briefingLink}`,
     `Open homepage: ${siteUrl}`,
+    `Manage subscription: ${unsubscribeUrl}`,
     "",
     ...articles.slice(0, 8).flatMap((article, index) => [
       `${index + 1}. ${article.title}`,
@@ -56,7 +58,7 @@ function buildPlainTextBody(briefing: Briefing, siteUrl: string): string {
   return lines.join("\n").trim();
 }
 
-function buildHtmlBody(briefing: Briefing, siteUrl: string): string {
+function buildHtmlBody(briefing: Briefing, siteUrl: string, unsubscribeUrl: string): string {
   const articles = [...briefing.issues, ...briefing.researchHighlights];
   const briefingLink = buildBriefingLink(siteUrl, briefing);
   const lastUpdatedLabel = briefing.lastUpdatedAt
@@ -122,6 +124,7 @@ function buildHtmlBody(briefing: Briefing, siteUrl: string): string {
         <div style="padding:18px 32px 28px;background:#FFFFFF;">
           <div style="font-size:12px;color:#64748B;line-height:1.7;">
             You're receiving this because you subscribed to Global AI Daily Brief updates.
+            <a href="${escapeHtml(unsubscribeUrl)}" style="color:#1D4ED8;text-decoration:none;margin-left:6px;">Unsubscribe</a>
           </div>
         </div>
       </div>
@@ -158,20 +161,23 @@ export async function sendBriefingEmail(
   }
 
   const client = new EmailClient(settings.connectionString);
-  const poller = await client.beginSend({
-    // Azure Communication Services validates senderAddress as a plain email address.
-    senderAddress: settings.senderAddress,
-    content: {
-      subject: buildSubject(briefing, settings.subjectPrefix),
-      plainText: buildPlainTextBody(briefing, settings.siteUrl),
-      html: buildHtmlBody(briefing, settings.siteUrl),
-    },
-    recipients: {
-      to: recipientAddresses.map((address) => ({ address })),
-    },
-  });
+  for (const address of recipientAddresses) {
+    const unsubscribeUrl = buildRecipientUnsubscribeLink(address);
+    const poller = await client.beginSend({
+      // Azure Communication Services validates senderAddress as a plain email address.
+      senderAddress: settings.senderAddress,
+      content: {
+        subject: buildSubject(briefing, settings.subjectPrefix),
+        plainText: buildPlainTextBody(briefing, settings.siteUrl, unsubscribeUrl),
+        html: buildHtmlBody(briefing, settings.siteUrl, unsubscribeUrl),
+      },
+      recipients: {
+        to: [{ address }],
+      },
+    });
 
-  await poller.pollUntilDone();
+    await poller.pollUntilDone();
+  }
   scopedLogger.info("Sent briefing email notification.", {
     briefingId: briefing.id,
     recipientCount: recipientAddresses.length,

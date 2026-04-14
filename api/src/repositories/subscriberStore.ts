@@ -173,6 +173,13 @@ export async function listActiveSubscribers(): Promise<SubscriberRecord[]> {
     .map(cloneRecord);
 }
 
+export async function getSubscriberByEmail(email: string): Promise<SubscriberRecord | null> {
+  const store = await loadStore();
+  const normalizedEmail = email.trim().toLowerCase();
+  const subscriber = store.subscribers.find((item) => item.email === normalizedEmail);
+  return subscriber ? cloneRecord(subscriber) : null;
+}
+
 export async function getSubscriberStats(): Promise<{ active: number; total: number; provider: "blob" | "file" }> {
   const store = await loadStore();
   const active = store.subscribers.filter((subscriber) => subscriber.status === "active").length;

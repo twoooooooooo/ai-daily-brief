@@ -58,6 +58,11 @@ export interface SubscriberStorageSettings {
   connectionString?: string;
 }
 
+export interface SubscriptionSecuritySettings {
+  tokenSecret?: string;
+  tokenTtlHours: number;
+}
+
 const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
 const DEFAULT_OPENAI_MODEL = "gpt-4.1-mini";
 const DEFAULT_DAILY_BRIEFING_SCHEDULE = "0 0 6 * * *";
@@ -145,6 +150,15 @@ export function getSubscriberStorageSettings(): SubscriberStorageSettings {
     connectionString: readEnv("SUBSCRIBER_STORAGE_CONNECTION_STRING")
       ?? readEnv("BRIEFING_STORAGE_CONNECTION_STRING")
       ?? readEnv("AzureWebJobsStorage"),
+  };
+}
+
+export function getSubscriptionSecuritySettings(): SubscriptionSecuritySettings {
+  const configuredTtl = Number.parseInt(readEnv("SUBSCRIPTION_TOKEN_TTL_HOURS") ?? "24", 10);
+
+  return {
+    tokenSecret: readEnv("SUBSCRIPTION_TOKEN_SECRET") ?? readEnv("ADMIN_API_KEY"),
+    tokenTtlHours: Number.isFinite(configuredTtl) && configuredTtl > 0 ? configuredTtl : 24,
   };
 }
 

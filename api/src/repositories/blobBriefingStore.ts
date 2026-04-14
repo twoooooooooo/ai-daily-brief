@@ -15,7 +15,12 @@ interface PersistedBriefingStoreFile {
   researchHighlights: ResearchHighlightRecord[];
 }
 
-function createEmptyStoreFile(): PersistedBriefingStoreFile {
+interface PersistedBriefingIndexFile {
+  version: 2;
+  briefings: BriefingRecord[];
+}
+
+function createEmptyLegacyStoreFile(): PersistedBriefingStoreFile {
   return {
     briefings: [],
     issues: [],
@@ -83,10 +88,9 @@ function buildIndexes(data: PersistedBriefingStoreFile): {
   };
 }
 
-function buildBundle(data: PersistedBriefingStoreFile, id: string): StoredBriefingBundle | null {
+function buildBundleFromLegacyData(data: PersistedBriefingStoreFile, id: string): StoredBriefingBundle | null {
   const indexes = buildIndexes(data);
   const briefing = indexes.briefingById.get(id);
-
   if (!briefing) {
     return null;
   }
@@ -98,36 +102,113 @@ function buildBundle(data: PersistedBriefingStoreFile, id: string): StoredBriefi
   });
 }
 
+function isLegacyStoreFile(value: unknown): value is PersistedBriefingStoreFile {
+  return Boolean(
+    value
+    && typeof value === "object"
+    && Array.isArray((value as PersistedBriefingStoreFile).briefings)
+    && Array.isArray((value as PersistedBriefingStoreFile).issues)
+    && Array.isArray((value as PersistedBriefingStoreFile).researchHighlights),
+  );
+}
+
+function isIndexStoreFile(value: unknown): value is PersistedBriefingIndexFile {
+  return Boolean(
+    value
+    && typeof value === "object"
+    && (value as PersistedBriefingIndexFile).version === 2
+    && Array.isArray((value as PersistedBriefingIndexFile).briefings),
+  );
+}
+
+function deriveItemsPrefix(blobName: string): string {
+  return blobName.replace(/\.json$/i, "") || "briefings";
+}
+
+function sortBriefings(left: BriefingRecord, right: BriefingRecord): number {
+  const dateComparison = right.date.localeCompare(left.date);
+  if (dateComparison !== 0) {
+    return dateComparison;
+  }
+
+  const editionComparison = getEditionRank(right.edition) - getEditionRank(left.edition);
+  if (editionComparison !== 0) {
+    return editionComparison;
+  }
+
+  return right.updatedAt.localeCompare(left.updatedAt);
+}
+
 export class BlobBriefingStore implements BriefingStore {
+  private readonly itemsPrefix: string;
+
   constructor(
     private readonly connectionString: string,
     private readonly containerName: string,
     private readonly blobName: string,
-  ) {}
+  ) {
+    this.itemsPrefix = deriveItemsPrefix(blobName);
+  }
 
-  private async getBlobClient() {
+  private async getContainerClient() {
     const serviceClient = BlobServiceClient.fromConnectionString(this.connectionString);
     const containerClient = serviceClient.getContainerClient(this.containerName);
     await containerClient.createIfNotExists();
+    return containerClient;
+  }
+
+  private async getIndexBlobClient() {
+    const containerClient = await this.getContainerClient();
     return containerClient.getBlockBlobClient(this.blobName);
   }
 
-  private async loadStoreFile(): Promise<PersistedBriefingStoreFile> {
-    const blobClient = await this.getBlobClient();
-    const exists = await blobClient.exists();
+  private async getBundleBlobClient(id: string) {
+    const containerClient = await this.getContainerClient();
+    return containerClient.getBlockBlobClient(`${this.itemsPrefix}/${id}.json`);
+  }
 
+  private async listBundleBlobNames(): Promise<string[]> {
+    const containerClient = await this.getContainerClient();
+    const names: string[] = [];
+    for await (const blob of containerClient.listBlobsFlat({ prefix: `${this.itemsPrefix}/` })) {
+      names.push(blob.name);
+    }
+    return names;
+  }
+
+  private async loadRawIndexPayload(): Promise<unknown | null> {
+    const blobClient = await this.getIndexBlobClient();
+    const exists = await blobClient.exists();
     if (!exists) {
-      return createEmptyStoreFile();
+      return null;
     }
 
     const download = await blobClient.download();
     const raw = await streamToString(download.readableStreamBody);
-    return raw.trim() ? JSON.parse(raw) as PersistedBriefingStoreFile : createEmptyStoreFile();
+    return raw.trim() ? JSON.parse(raw) : null;
   }
 
-  private async saveStoreFile(data: PersistedBriefingStoreFile): Promise<void> {
-    const blobClient = await this.getBlobClient();
-    const body = `${JSON.stringify(data, null, 2)}\n`;
+  private async loadIndexFile(): Promise<PersistedBriefingIndexFile | null> {
+    const payload = await this.loadRawIndexPayload();
+    return isIndexStoreFile(payload)
+      ? {
+          version: 2,
+          briefings: payload.briefings.map(cloneBriefingRecord),
+        }
+      : null;
+  }
+
+  private async loadLegacyStoreFile(): Promise<PersistedBriefingStoreFile | null> {
+    const payload = await this.loadRawIndexPayload();
+    return isLegacyStoreFile(payload) ? payload : null;
+  }
+
+  private async saveIndexFile(index: PersistedBriefingIndexFile): Promise<void> {
+    const blobClient = await this.getIndexBlobClient();
+    const body = `${JSON.stringify({
+      version: 2,
+      briefings: index.briefings.map(cloneBriefingRecord),
+    }, null, 2)}\n`;
     await blobClient.upload(body, Buffer.byteLength(body), {
       blobHTTPHeaders: {
         blobContentType: "application/json; charset=utf-8",
@@ -135,46 +216,117 @@ export class BlobBriefingStore implements BriefingStore {
     });
   }
 
+  private async loadBundleById(id: string): Promise<StoredBriefingBundle | null> {
+    const bundleClient = await this.getBundleBlobClient(id);
+    const exists = await bundleClient.exists();
+    if (!exists) {
+      return null;
+    }
+
+    const download = await bundleClient.download();
+    const raw = await streamToString(download.readableStreamBody);
+    if (!raw.trim()) {
+      return null;
+    }
+
+    return cloneBundle(JSON.parse(raw) as StoredBriefingBundle);
+  }
+
+  private async saveBundle(bundle: StoredBriefingBundle): Promise<void> {
+    const bundleClient = await this.getBundleBlobClient(bundle.briefing.id);
+    const body = `${JSON.stringify(cloneBundle(bundle), null, 2)}\n`;
+    await bundleClient.upload(body, Buffer.byteLength(body), {
+      blobHTTPHeaders: {
+        blobContentType: "application/json; charset=utf-8",
+      },
+    });
+  }
+
+  private async migrateLegacyStoreIfNeeded(): Promise<void> {
+    const existingIndex = await this.loadIndexFile();
+    if (existingIndex) {
+      return;
+    }
+
+    const legacyStore = await this.loadLegacyStoreFile();
+    if (!legacyStore || legacyStore.briefings.length === 0) {
+      return;
+    }
+
+    const migratedBriefings = [...legacyStore.briefings].map(cloneBriefingRecord).sort(sortBriefings);
+    for (const briefing of migratedBriefings) {
+      const bundle = buildBundleFromLegacyData(legacyStore, briefing.id);
+      if (bundle) {
+        await this.saveBundle(bundle);
+      }
+    }
+
+    await this.saveIndexFile({
+      version: 2,
+      briefings: migratedBriefings,
+    });
+  }
+
   async saveBriefing(bundle: StoredBriefingBundle): Promise<void> {
-    const data = await this.loadStoreFile();
-    const nextBriefings = data.briefings.filter((briefing) => briefing.id !== bundle.briefing.id);
-    const nextIssues = data.issues.filter((issue) => issue.briefingId !== bundle.briefing.id);
-    const nextResearchHighlights = data.researchHighlights.filter((item) => item.briefingId !== bundle.briefing.id);
+    await this.migrateLegacyStoreIfNeeded();
 
+    const existingIndex = await this.loadIndexFile();
+    const nextBriefings = (existingIndex?.briefings ?? [])
+      .filter((briefing) => briefing.id !== bundle.briefing.id);
     nextBriefings.push(cloneBriefingRecord(bundle.briefing));
-    nextIssues.push(...cloneIssueRecords(bundle.issues));
-    nextResearchHighlights.push(...cloneIssueRecords(bundle.researchHighlights));
+    nextBriefings.sort(sortBriefings);
 
-    await this.saveStoreFile({
+    await this.saveBundle(bundle);
+    await this.saveIndexFile({
+      version: 2,
       briefings: nextBriefings,
-      issues: nextIssues,
-      researchHighlights: nextResearchHighlights,
     });
   }
 
   async getBriefingById(id: string): Promise<StoredBriefingBundle | null> {
-    return buildBundle(await this.loadStoreFile(), id);
+    const index = await this.loadIndexFile();
+    if (index) {
+      return this.loadBundleById(id);
+    }
+
+    const legacyStore = await this.loadLegacyStoreFile();
+    return legacyStore ? buildBundleFromLegacyData(legacyStore, id) : null;
   }
 
   async getBriefingByDate(date: string): Promise<StoredBriefingBundle | null> {
-    const data = await this.loadStoreFile();
-    const briefing = [...data.briefings]
-      .filter((item) => item.date === date)
-      .sort((left, right) => {
-        const editionComparison = getEditionRank(right.edition) - getEditionRank(left.edition);
-        if (editionComparison !== 0) {
-          return editionComparison;
-        }
+    const index = await this.loadIndexFile();
+    if (index) {
+      const briefing = [...index.briefings]
+        .filter((item) => item.date === date)
+        .sort(sortBriefings)[0];
+      return briefing ? this.loadBundleById(briefing.id) : null;
+    }
 
-        return right.updatedAt.localeCompare(left.updatedAt);
-      })[0];
-    return briefing ? buildBundle(data, briefing.id) : null;
+    const legacyStore = await this.loadLegacyStoreFile();
+    if (!legacyStore) {
+      return null;
+    }
+
+    const briefing = [...legacyStore.briefings]
+      .filter((item) => item.date === date)
+      .sort(sortBriefings)[0];
+    return briefing ? buildBundleFromLegacyData(legacyStore, briefing.id) : null;
   }
 
   async getBriefingByDateAndEdition(date: string, edition: BriefingEdition): Promise<StoredBriefingBundle | null> {
-    const data = await this.loadStoreFile();
-    const briefing = data.briefings.find((item) => item.date === date && item.edition === edition);
-    return briefing ? buildBundle(data, briefing.id) : null;
+    const index = await this.loadIndexFile();
+    if (index) {
+      const briefing = index.briefings.find((item) => item.date === date && item.edition === edition);
+      return briefing ? this.loadBundleById(briefing.id) : null;
+    }
+
+    const legacyStore = await this.loadLegacyStoreFile();
+    if (!legacyStore) {
+      return null;
+    }
+
+    const briefing = legacyStore.briefings.find((item) => item.date === date && item.edition === edition);
+    return briefing ? buildBundleFromLegacyData(legacyStore, briefing.id) : null;
   }
 
   async getTodayBriefing(today: string): Promise<StoredBriefingBundle | null> {
@@ -182,24 +334,25 @@ export class BlobBriefingStore implements BriefingStore {
   }
 
   async listRecentBriefings(limit?: number): Promise<StoredBriefingBundle[]> {
-    const data = await this.loadStoreFile();
-    const sortedBriefings = [...data.briefings].sort((left, right) => {
-      const dateComparison = right.date.localeCompare(left.date);
-      if (dateComparison !== 0) {
-        return dateComparison;
-      }
+    const index = await this.loadIndexFile();
+    if (index) {
+      const briefings = typeof limit === "number"
+        ? index.briefings.slice(0, limit)
+        : index.briefings;
 
-      const editionComparison = getEditionRank(right.edition) - getEditionRank(left.edition);
-      if (editionComparison !== 0) {
-        return editionComparison;
-      }
+      const bundles = await Promise.all(briefings.map((briefing) => this.loadBundleById(briefing.id)));
+      return bundles.filter((bundle): bundle is StoredBriefingBundle => bundle !== null);
+    }
 
-      return right.updatedAt.localeCompare(left.updatedAt);
-    });
+    const legacyStore = await this.loadLegacyStoreFile();
+    if (!legacyStore) {
+      return [];
+    }
+
+    const sortedBriefings = [...legacyStore.briefings].sort(sortBriefings);
     const briefings = typeof limit === "number" ? sortedBriefings.slice(0, limit) : sortedBriefings;
-
     return briefings
-      .map((briefing) => buildBundle(data, briefing.id))
+      .map((briefing) => buildBundleFromLegacyData(legacyStore, briefing.id))
       .filter((bundle): bundle is StoredBriefingBundle => bundle !== null);
   }
 }
