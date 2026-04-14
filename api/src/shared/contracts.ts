@@ -101,6 +101,7 @@ export interface BriefingOperationalStatus {
       averageAgeHours?: number;
       staleArticleCount: number;
       articlesWithin24Hours: number;
+      articlesWithUnknownPublishedAt: number;
     };
     coverage?: {
       sourceCounts: Array<{
@@ -145,7 +146,8 @@ export interface BriefingOperationalStatus {
       id: string;
       title: string;
       source: string;
-      publishedAt: string;
+      publishedAt?: string;
+      publishedAtKnown: boolean;
       cluster: string;
       impactScore: number;
       freshnessScore: number;

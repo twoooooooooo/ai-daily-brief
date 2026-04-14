@@ -21,7 +21,8 @@ export interface NormalizedArticle {
   title: string;
   source: string;
   sourceUrl: string;
-  publishedAt: string;
+  publishedAt?: string;
+  publishedAtKnown: boolean;
   summary: string;
   content?: string;
   type: ArticleType;

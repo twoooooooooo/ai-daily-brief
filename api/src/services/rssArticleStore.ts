@@ -10,7 +10,7 @@ export function upsertRssArticles(articles: NormalizedArticle[]): void {
 
 export function listStoredRssArticles(): NormalizedArticle[] {
   return [...articleStore.values()].sort((left, right) =>
-    right.publishedAt.localeCompare(left.publishedAt),
+    (right.publishedAt ?? right.ingestedAt).localeCompare(left.publishedAt ?? left.ingestedAt),
   );
 }
 

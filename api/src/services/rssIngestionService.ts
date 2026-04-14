@@ -93,18 +93,24 @@ function resolveItemSource(feed: RssFeedConfig, item: ParsedFeedItem): string {
   return feed.source;
 }
 
-function resolvePublishedAt(item: ParsedFeedItem): string {
+function resolvePublishedAt(item: ParsedFeedItem): {
+  value?: string;
+  known: boolean;
+} {
   const rawDate = item.pubDate ?? item.published ?? item.updated;
   if (!rawDate) {
-    return new Date().toISOString();
+    return { value: undefined, known: false };
   }
 
   const parsed = new Date(rawDate);
   if (Number.isNaN(parsed.getTime())) {
-    return new Date().toISOString();
+    return { value: undefined, known: false };
   }
 
-  return parsed.toISOString();
+  return {
+    value: parsed.toISOString(),
+    known: true,
+  };
 }
 
 function resolveSummary(item: ParsedFeedItem): string {
@@ -128,8 +134,12 @@ function decodeHtmlEntities(value: string): string {
     .replace(/&gt;/g, ">");
 }
 
-function buildArticleId(feed: RssFeedConfig, title: string, publishedAt: string): string {
-  return `${feed.id}-${slugify(title)}-${publishedAt.slice(0, 10)}`;
+function buildArticleId(feed: RssFeedConfig, title: string, publishedAt?: string): string {
+  return `${feed.id}-${slugify(title)}-${publishedAt?.slice(0, 10) ?? "undated"}`;
+}
+
+function getArticleSortTimestamp(article: NormalizedArticle): string {
+  return article.publishedAt ?? article.ingestedAt;
 }
 
 function extractFeedItems(parsedXml: ParsedRssRoot): ParsedFeedItem[] {
@@ -148,11 +158,12 @@ function normalizeFeedItem(feed: RssFeedConfig, item: ParsedFeedItem): Normalize
 
   const publishedAt = resolvePublishedAt(item);
   return {
-    id: buildArticleId(feed, title, publishedAt),
+    id: buildArticleId(feed, title, publishedAt.value),
     title,
     source: resolveItemSource(feed, item),
     sourceUrl,
-    publishedAt,
+    publishedAt: publishedAt.value,
+    publishedAtKnown: publishedAt.known,
     summary: resolveSummary(item),
     content: resolveContent(item),
     type: feed.kind,
@@ -208,7 +219,7 @@ function parseAnthropicNewsroom(feed: RssFeedConfig, html: string): NormalizedAr
 
     const parsedDate = new Date(rawDate);
     const publishedAt = Number.isNaN(parsedDate.getTime())
-      ? new Date().toISOString()
+      ? undefined
       : parsedDate.toISOString();
     const title = normalizeWhitespace(rawTitle);
     const summary = normalizeWhitespace(rawSummary);
@@ -220,6 +231,7 @@ function parseAnthropicNewsroom(feed: RssFeedConfig, html: string): NormalizedAr
       source: feed.source,
       sourceUrl,
       publishedAt,
+      publishedAtKnown: Boolean(publishedAt),
       summary,
       content: summary,
       type: feed.kind,
@@ -234,7 +246,7 @@ function parseAnthropicNewsroom(feed: RssFeedConfig, html: string): NormalizedAr
     articles.set(createArticleStoreKey(article), article);
   }
 
-  return [...articles.values()].sort((left, right) => right.publishedAt.localeCompare(left.publishedAt));
+  return [...articles.values()].sort((left, right) => getArticleSortTimestamp(right).localeCompare(getArticleSortTimestamp(left)));
 }
 
 function parseMistralNewsroom(feed: RssFeedConfig, html: string): NormalizedArticle[] {
@@ -253,7 +265,7 @@ function parseMistralNewsroom(feed: RssFeedConfig, html: string): NormalizedArti
 
     const parsedDate = new Date(rawDate);
     const publishedAt = Number.isNaN(parsedDate.getTime())
-      ? new Date().toISOString()
+      ? undefined
       : parsedDate.toISOString();
     const title = normalizeWhitespace(rawTitle);
     const summary = normalizeWhitespace(rawSummary);
@@ -265,6 +277,7 @@ function parseMistralNewsroom(feed: RssFeedConfig, html: string): NormalizedArti
       source: feed.source,
       sourceUrl,
       publishedAt,
+      publishedAtKnown: Boolean(publishedAt),
       summary,
       content: summary,
       type: feed.kind,
@@ -279,7 +292,7 @@ function parseMistralNewsroom(feed: RssFeedConfig, html: string): NormalizedArti
     articles.set(createArticleStoreKey(article), article);
   }
 
-  return [...articles.values()].sort((left, right) => right.publishedAt.localeCompare(left.publishedAt));
+  return [...articles.values()].sort((left, right) => getArticleSortTimestamp(right).localeCompare(getArticleSortTimestamp(left)));
 }
 
 function parseCohereChangelog(feed: RssFeedConfig, html: string): NormalizedArticle[] {
@@ -299,7 +312,7 @@ function parseCohereChangelog(feed: RssFeedConfig, html: string): NormalizedArti
 
     const parsedDate = new Date(rawCreatedAt);
     const publishedAt = Number.isNaN(parsedDate.getTime())
-      ? new Date().toISOString()
+      ? undefined
       : parsedDate.toISOString();
     const title = normalizeWhitespace(rawTitle);
     const summary = normalizeWhitespace(rawDescription || `${title} was published in Cohere's official changelog.`);
@@ -311,6 +324,7 @@ function parseCohereChangelog(feed: RssFeedConfig, html: string): NormalizedArti
       source: feed.source,
       sourceUrl,
       publishedAt,
+      publishedAtKnown: Boolean(publishedAt),
       summary,
       content: summary,
       type: feed.kind,
@@ -325,7 +339,7 @@ function parseCohereChangelog(feed: RssFeedConfig, html: string): NormalizedArti
     articles.set(createArticleStoreKey(article), article);
   }
 
-  return [...articles.values()].sort((left, right) => right.publishedAt.localeCompare(left.publishedAt));
+  return [...articles.values()].sort((left, right) => getArticleSortTimestamp(right).localeCompare(getArticleSortTimestamp(left)));
 }
 
 async function ingestFeed(feed: RssFeedConfig): Promise<NormalizedArticle[]> {
@@ -386,7 +400,7 @@ function dedupeArticles(articles: NormalizedArticle[]): NormalizedArticle[] {
   }
 
   return [...deduped.values()].sort((left, right) =>
-    right.publishedAt.localeCompare(left.publishedAt),
+    getArticleSortTimestamp(right).localeCompare(getArticleSortTimestamp(left)),
   );
 }
 

@@ -74,8 +74,10 @@ function summarizeCounts<T extends string>(values: T[]): Array<{ key: T; count: 
 
 function buildLatestBriefingTelemetry(briefing: Briefing) {
   const articles: Issue[] = [...briefing.issues, ...briefing.researchHighlights];
+  const unknownPublishedAtCount = articles.filter((article) => !article.sourcePublishedAt).length;
   const publishedDates = articles
-    .map((article) => new Date(article.sourcePublishedAt ?? `${article.date}T00:00:00.000Z`))
+    .filter((article) => Boolean(article.sourcePublishedAt))
+    .map((article) => new Date(article.sourcePublishedAt as string))
     .filter((value) => !Number.isNaN(value.getTime()));
   const articleAges = publishedDates.map((value) => Math.max(0, (Date.now() - value.getTime()) / 36e5));
   const averageAgeHours = articleAges.length > 0
@@ -95,6 +97,7 @@ function buildLatestBriefingTelemetry(briefing: Briefing) {
       averageAgeHours,
       staleArticleCount: articleAges.filter((age) => age > 48).length,
       articlesWithin24Hours: articleAges.filter((age) => age <= 24).length,
+      articlesWithUnknownPublishedAt: unknownPublishedAtCount,
     },
     coverage: {
       sourceCounts: summarizeCounts(articles.map((article) => article.source))
@@ -193,7 +196,7 @@ export async function getOperationalStatusHandler(
     const latestBriefing = await getLatestPersistedBriefing();
     const latestJob = getLatestDailyBriefingJob();
     const latestEmailJob = getLatestBriefingEmailJob();
-    const latestSelection = getLatestBriefingSelectionDiagnostics();
+    const latestSelection = await getLatestBriefingSelectionDiagnostics();
     const emailSettings = getBriefingEmailSettings();
     const subscriberStats = await getSubscriberStats();
     const status: BriefingOperationalStatus = {

@@ -96,6 +96,28 @@ export interface BriefingOperationalStatus {
     updatedAt?: string;
     issueCount: number;
     researchHighlightCount: number;
+    freshness?: {
+      newestArticlePublishedAt?: string;
+      oldestArticlePublishedAt?: string;
+      averageAgeHours?: number;
+      staleArticleCount: number;
+      articlesWithin24Hours: number;
+      articlesWithUnknownPublishedAt: number;
+    };
+    coverage?: {
+      sourceCounts: Array<{
+        source: string;
+        count: number;
+      }>;
+      categoryCounts: Array<{
+        category: Category;
+        count: number;
+      }>;
+      typeCounts: Array<{
+        type: ArticleType;
+        count: number;
+      }>;
+    };
   };
   latestJob?: {
     id: string;
@@ -104,6 +126,24 @@ export interface BriefingOperationalStatus {
     date?: string;
     edition?: BriefingEdition;
     error?: string;
+  };
+  latestSelection?: {
+    updatedAt: string;
+    date: string;
+    edition: BriefingEdition;
+    selectedArticleCount: number;
+    entries: Array<{
+      id: string;
+      title: string;
+      source: string;
+      publishedAt?: string;
+      publishedAtKnown: boolean;
+      cluster: string;
+      impactScore: number;
+      freshnessScore: number;
+      totalScore: number;
+      reasons: string[];
+    }>;
   };
 }
 

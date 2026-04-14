@@ -47,6 +47,24 @@ const TOPIC_CLUSTER_KEYWORDS: Record<string, string[]> = {
   funding: ["funding", "raises", "investment", "ipo", "acquisition"],
   voice: ["voice", "audio", "speech", "translation"],
 };
+const SELECTION_SLOT_DEFINITIONS = [
+  {
+    id: "market-infrastructure",
+    matches: (article: NormalizedArticle) => article.category === "Investment" || article.category === "Infrastructure",
+  },
+  {
+    id: "policy-regulation",
+    matches: (article: NormalizedArticle) => article.category === "Policy",
+  },
+  {
+    id: "product-model",
+    matches: (article: NormalizedArticle) => article.category === "Product" || article.category === "Model",
+  },
+  {
+    id: "research-open",
+    matches: (article: NormalizedArticle) => article.type === "research" || article.category === "Research",
+  },
+] as const;
 
 interface OpenAIChatCompletionResponse {
   choices?: Array<{
@@ -322,8 +340,25 @@ function getCategoryReason(article: NormalizedArticle): string | null {
   }
 }
 
+function getArticleAgeHours(article: NormalizedArticle): number | null {
+  if (!article.publishedAt || !article.publishedAtKnown) {
+    return null;
+  }
+
+  const parsed = new Date(article.publishedAt);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return Math.max(0, (Date.now() - parsed.getTime()) / 36e5);
+}
+
 function getRecencyPriority(article: NormalizedArticle): number {
-  const ageHours = Math.max(0, (Date.now() - new Date(article.publishedAt).getTime()) / 36e5);
+  const ageHours = getArticleAgeHours(article);
+  if (ageHours === null) {
+    return article.type === "research" ? -2.6 : -5.5;
+  }
+
   if (article.type === "research") {
     if (ageHours <= 24) return 2.6;
     if (ageHours <= 72) return 1.7;
@@ -340,7 +375,11 @@ function getRecencyPriority(article: NormalizedArticle): number {
 }
 
 function getRecencyReason(article: NormalizedArticle): string | null {
-  const ageHours = Math.max(0, (Date.now() - new Date(article.publishedAt).getTime()) / 36e5);
+  const ageHours = getArticleAgeHours(article);
+  if (ageHours === null) {
+    return "기사 발행일이 확인되지 않음";
+  }
+
   if (article.type === "research") {
     if (ageHours <= 72) return "최근 며칠 내 나온 연구";
     if (ageHours <= MAX_RESEARCH_AGE_HOURS) return "최근 일주일 내 연구";
@@ -496,7 +535,8 @@ function buildPriorCoverage(priorBriefings: Briefing[], date: string): PriorCove
         title: article.title,
         source: article.source,
         sourceUrl: article.sourceUrl,
-        publishedAt: `${article.date}T00:00:00.000Z`,
+        publishedAt: article.sourcePublishedAt ?? `${article.date}T00:00:00.000Z`,
+        publishedAtKnown: Boolean(article.sourcePublishedAt),
         summary: article.summary,
         content: article.summary,
         type: article.type,
@@ -567,7 +607,11 @@ function getOverlapPenalty(article: NormalizedArticle, priorCoverage: PriorCover
 }
 
 function isFreshEnoughForGeneration(article: NormalizedArticle): boolean {
-  const ageHours = Math.max(0, (Date.now() - new Date(article.publishedAt).getTime()) / 36e5);
+  const ageHours = getArticleAgeHours(article);
+  if (ageHours === null) {
+    return false;
+  }
+
   if (article.type === "research") {
     return ageHours <= MAX_RESEARCH_AGE_HOURS;
   }
@@ -684,7 +728,7 @@ function selectArticlesForGeneration(
       return false;
     }
 
-    if (article.type === "research" && typeCount >= 5) {
+    if (article.type === "research" && typeCount >= 4) {
       return false;
     }
 
@@ -712,6 +756,20 @@ function selectArticlesForGeneration(
     layerCounts.set(article.layer, layerCount + 1);
     return true;
   };
+
+  for (const slot of SELECTION_SLOT_DEFINITIONS) {
+    if (selected.length >= MAX_GENERATION_ARTICLES) {
+      break;
+    }
+
+    const candidate = clusterRepresentatives.find((entry) =>
+      slot.matches(entry.article) && !selected.some((selectedArticle) => selectedArticle.id === entry.article.id),
+    );
+
+    if (candidate) {
+      addArticle(candidate.article);
+    }
+  }
 
   const layerSeedOrder: FeedLayer[] = ["general-news", "specialist-news", "official", "research"];
   for (const layer of layerSeedOrder) {
@@ -760,7 +818,9 @@ function selectArticlesForGeneration(
     }
   }
 
-  return selected.sort((left, right) => right.publishedAt.localeCompare(left.publishedAt));
+  return selected.sort((left, right) =>
+    (right.publishedAt ?? right.ingestedAt).localeCompare(left.publishedAt ?? left.ingestedAt),
+  );
 }
 
 function buildOpenAIRequestBody(articles: NormalizedArticle[], date: string) {
@@ -1058,25 +1118,34 @@ export async function generateDailyBriefing(input: GenerateBriefingInput): Promi
   const diagnosticArticles = [...candidateArticles]
     .map((article) => scoreArticleBreakdown(article, input.articles, buildPriorCoverage(input.priorBriefings ?? [], date), trendingSignals))
     .filter((entry): entry is ArticleScoreBreakdown => entry !== null);
-  recordBriefingSelectionDiagnostics({
-    date,
-    edition,
-    selectedArticleCount: selectedArticles.length,
-    entries: diagnosticArticles
-      .filter((entry) => selectedArticles.some((article) => article.id === entry.article.id))
-      .sort((left, right) => right.totalScore - left.totalScore)
-      .map((entry) => ({
-        id: entry.article.id,
-        title: entry.article.title,
-        source: entry.article.source,
-        publishedAt: entry.article.publishedAt,
-        cluster: entry.cluster,
-        impactScore: Math.round(entry.impactScore * 100) / 100,
-        freshnessScore: Math.round(entry.freshnessScore * 100) / 100,
-        totalScore: Math.round(entry.totalScore * 100) / 100,
-        reasons: entry.reasons,
-      })),
-  });
+  try {
+    await recordBriefingSelectionDiagnostics({
+      date,
+      edition,
+      selectedArticleCount: selectedArticles.length,
+      entries: diagnosticArticles
+        .filter((entry) => selectedArticles.some((article) => article.id === entry.article.id))
+        .sort((left, right) => right.totalScore - left.totalScore)
+        .map((entry) => ({
+          id: entry.article.id,
+          title: entry.article.title,
+          source: entry.article.source,
+          publishedAt: entry.article.publishedAt,
+          publishedAtKnown: entry.article.publishedAtKnown,
+          cluster: entry.cluster,
+          impactScore: Math.round(entry.impactScore * 100) / 100,
+          freshnessScore: Math.round(entry.freshnessScore * 100) / 100,
+          totalScore: Math.round(entry.totalScore * 100) / 100,
+          reasons: entry.reasons,
+        })),
+    });
+  } catch (error) {
+    scopedLogger.exception("Failed to persist briefing selection diagnostics; continuing generation.", error, {
+      date,
+      edition,
+      stage: "selection-diagnostics",
+    });
+  }
   const generatedContent = await requestGeneratedBriefing(selectedArticles, date, input.logContext);
   let briefing = applyBriefingIdentity(
     cloneEnglishFieldsIntoLocalizedShape(parseBriefingResponse(generatedContent, date, edition)),

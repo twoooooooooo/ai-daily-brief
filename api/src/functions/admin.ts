@@ -374,6 +374,7 @@ export async function probeRssHandler(
         title: article.title,
         source: article.source,
         publishedAt: article.publishedAt,
+        publishedAtKnown: article.publishedAtKnown,
       })),
     });
   });
@@ -403,6 +404,7 @@ export async function probeGenerationHandler(
         source: "System Probe",
         sourceUrl: "https://example.com/probe-article",
         publishedAt: new Date().toISOString(),
+        publishedAtKnown: true,
         summary: "This is a synthetic article used only to verify production briefing generation.",
         content: "A synthetic article used to verify that the deployed environment can complete the structured briefing generation path.",
         type: "news",
