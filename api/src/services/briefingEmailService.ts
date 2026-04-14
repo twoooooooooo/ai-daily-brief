@@ -24,10 +24,35 @@ function buildSubject(briefing: Briefing, subjectPrefix: string): string {
   return `${subjectPrefix} ${briefing.date} ${getEditionLabel(briefing.edition)} Edition`;
 }
 
+function getCategoryBadgeStyles(category: Briefing["issues"][number]["category"]): {
+  background: string;
+  color: string;
+  dot: string;
+  label: string;
+} {
+  switch (category) {
+    case "Model":
+      return { background: "#DBEAFE", color: "#1D4ED8", dot: "#2563EB", label: "모델" };
+    case "Research":
+      return { background: "#EDE9FE", color: "#6D28D9", dot: "#7C3AED", label: "연구" };
+    case "Policy":
+      return { background: "#DCFCE7", color: "#166534", dot: "#16A34A", label: "정책" };
+    case "Product":
+      return { background: "#FEF3C7", color: "#92400E", dot: "#F59E0B", label: "제품" };
+    case "Investment":
+      return { background: "#FCE7F3", color: "#9D174D", dot: "#EC4899", label: "투자" };
+    case "Infrastructure":
+      return { background: "#E0F2FE", color: "#0C4A6E", dot: "#0EA5E9", label: "인프라" };
+    default:
+      return { background: "#E5E7EB", color: "#475569", dot: "#94A3B8", label: category };
+  }
+}
+
 function getImportanceBadgeStyles(importance: Briefing["issues"][number]["importance"]): {
   background: string;
   border: string;
   color: string;
+  label: string;
 } {
   switch (importance) {
     case "High":
@@ -35,18 +60,21 @@ function getImportanceBadgeStyles(importance: Briefing["issues"][number]["import
         background: "#FEE2E2",
         border: "#FCA5A5",
         color: "#991B1B",
+        label: "높음",
       };
     case "Medium":
       return {
         background: "#FEF3C7",
         border: "#FCD34D",
         color: "#92400E",
+        label: "보통",
       };
     default:
       return {
         background: "#DBEAFE",
         border: "#93C5FD",
         color: "#1E3A8A",
+        label: "낮음",
       };
   }
 }
@@ -97,18 +125,26 @@ function buildHtmlBody(briefing: Briefing, siteUrl: string, unsubscribeUrl: stri
     })
     : null;
   const articleMarkup = articles.slice(0, 8).map((article) => {
+    const categoryBadge = getCategoryBadgeStyles(article.category);
     const importanceBadge = getImportanceBadgeStyles(article.importance);
     return `
     <div style="padding:22px 22px 20px;border:1px solid #E5E7EB;border-radius:18px;background:#FFFFFF;margin-bottom:14px;">
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
-        <span style="font-size:12px;color:#64748B;letter-spacing:0.04em;">${escapeHtml(article.source)} · ${escapeHtml(article.category)}</span>
-        <span style="display:inline-block;padding:4px 10px;border-radius:999px;background:${importanceBadge.background};border:1px solid ${importanceBadge.border};color:${importanceBadge.color};font-size:11px;font-weight:800;letter-spacing:0.06em;text-transform:uppercase;">${escapeHtml(article.importance)}</span>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:14px;">
+        <span style="display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;background:${categoryBadge.background};color:${categoryBadge.color};font-size:11px;font-weight:800;letter-spacing:0.06em;">
+          <span style="display:inline-block;width:6px;height:6px;border-radius:999px;background:${categoryBadge.dot};"></span>
+          ${escapeHtml(categoryBadge.label)}
+        </span>
+        <span style="display:inline-flex;align-items:center;padding:5px 10px;border-radius:999px;background:${importanceBadge.background};border:1px solid ${importanceBadge.border};color:${importanceBadge.color};font-size:11px;font-weight:800;letter-spacing:0.06em;">
+          ${escapeHtml(importanceBadge.label)}
+        </span>
+        <a href="${escapeHtml(article.sourceUrl)}" style="display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;background:#F8FAFC;border:1px solid #CBD5E1;color:#334155;font-size:11px;font-weight:700;text-decoration:none;">
+          원문 ${escapeHtml(article.source)}
+        </a>
       </div>
       <div style="font-size:21px;line-height:1.4;font-weight:700;color:#0F172A;margin-bottom:10px;">${escapeHtml(article.title)}</div>
       <div style="font-size:14px;line-height:1.75;color:#334155;margin-bottom:12px;">${escapeHtml(article.summary)}</div>
       <div style="font-size:13px;line-height:1.75;color:#0F172A;margin-bottom:8px;"><strong>Why it matters:</strong> ${escapeHtml(article.whyItMatters)}</div>
-      <div style="font-size:13px;line-height:1.75;color:#0F172A;margin-bottom:14px;"><strong>Practical impact:</strong> ${escapeHtml(article.practicalImpact)}</div>
-      <a href="${escapeHtml(article.sourceUrl)}" style="display:inline-block;font-size:13px;color:#1D4ED8;text-decoration:none;font-weight:700;">Read source</a>
+      <div style="font-size:13px;line-height:1.75;color:#0F172A;"><strong>Practical impact:</strong> ${escapeHtml(article.practicalImpact)}</div>
     </div>
   `;
   }).join("");
