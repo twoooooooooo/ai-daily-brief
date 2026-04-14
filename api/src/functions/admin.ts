@@ -135,6 +135,10 @@ function parseOptionalNumber(value: unknown): number | undefined {
   return value;
 }
 
+function isValidEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim().toLowerCase());
+}
+
 export async function ingestRssHandler(
   request: HttpRequest,
   context: InvocationContext,
@@ -511,6 +515,10 @@ export async function sendBriefingEmailHandler(
 
     const edition = parseOptionalEdition(request.query.get("edition")) ?? "Afternoon";
     const date = request.query.get("date")?.trim() || resolveBriefingDate();
+    const testRecipient = request.query.get("testRecipient")?.trim().toLowerCase();
+    if (testRecipient && !isValidEmail(testRecipient)) {
+      return badRequestResponse("A valid testRecipient email address is required.");
+    }
     const briefing = await getBriefingByDateAndEdition(date, edition) ?? await getLatestBriefingForEdition(edition);
     const emailJobId = createCorrelationId(`manual-email-${edition.toLowerCase()}`);
 
@@ -532,7 +540,9 @@ export async function sendBriefingEmailHandler(
         briefingId: briefing.id,
       });
 
-      const result = await sendBriefingEmail(briefing, logContext);
+      const result = await sendBriefingEmail(briefing, logContext, {
+        overrideRecipients: testRecipient ? [testRecipient] : undefined,
+      });
       if (result.skipped) {
         recordBriefingEmailJobSkipped({
           id: emailJobId,
@@ -557,6 +567,7 @@ export async function sendBriefingEmailHandler(
         reason: result.reason,
         briefingId: briefing.id,
         recipientCount: result.recipientCount ?? 0,
+        testRecipient: testRecipient ?? null,
       });
     } catch (error) {
       recordBriefingEmailJobFailed({

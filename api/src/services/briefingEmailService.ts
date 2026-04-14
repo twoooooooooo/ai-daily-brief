@@ -168,6 +168,9 @@ function buildHtmlBody(briefing: Briefing, siteUrl: string, unsubscribeUrl: stri
 export async function sendBriefingEmail(
   briefing: Briefing,
   logContext: LogContext = {},
+  options: {
+    overrideRecipients?: string[];
+  } = {},
 ): Promise<{ skipped: boolean; reason?: string; recipientCount?: number }> {
   const settings = getBriefingEmailSettings();
   const scopedLogger = logger.child(logContext);
@@ -185,8 +188,10 @@ export async function sendBriefingEmail(
     return { skipped: true, reason: "email-config-incomplete" };
   }
 
-  const subscriberAddresses = (await listActiveSubscribers()).map((subscriber) => subscriber.email);
-  const recipientAddresses = [...new Set([...settings.recipients, ...subscriberAddresses])];
+  const subscriberAddresses = options.overrideRecipients
+    ? []
+    : (await listActiveSubscribers()).map((subscriber) => subscriber.email);
+  const recipientAddresses = [...new Set(options.overrideRecipients ?? [...settings.recipients, ...subscriberAddresses])];
 
   if (recipientAddresses.length === 0) {
     scopedLogger.warn("Skipping briefing email because there are no recipients configured.");
