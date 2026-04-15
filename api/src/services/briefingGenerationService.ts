@@ -47,6 +47,14 @@ const TOPIC_CLUSTER_KEYWORDS: Record<string, string[]> = {
   funding: ["funding", "raises", "investment", "ipo", "acquisition"],
   voice: ["voice", "audio", "speech", "translation"],
 };
+const STORY_DUPLICATE_STOPWORDS = new Set([
+  "the", "and", "for", "with", "from", "into", "that", "this", "their", "about", "what", "your",
+  "have", "will", "help", "using", "used", "news", "latest", "update", "updates", "new",
+  "launch", "launched", "release", "released", "introducing", "announces", "announced", "adds",
+  "added", "openai", "google", "anthropic", "claude", "mistral", "cohere", "microsoft", "meta",
+  "nvidia", "aws", "hugging", "face", "techcrunch", "wired", "verge", "review", "mit", "ai",
+  "gpt", "chatgpt", "gemini", "llm", "llms",
+]);
 const SELECTION_SLOT_DEFINITIONS = [
   {
     id: "market-infrastructure",
@@ -490,6 +498,74 @@ function normalizeText(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9가-힣]+/g, " ").replace(/\s+/g, " ").trim();
 }
 
+function getStoryTokens(value: string): string[] {
+  return [...new Set(
+    normalizeText(value)
+      .split(" ")
+      .filter((token) => token.length >= 4)
+      .filter((token) => !STORY_DUPLICATE_STOPWORDS.has(token)),
+  )];
+}
+
+function getSharedTokenCount(left: string[], right: string[]): number {
+  if (left.length === 0 || right.length === 0) {
+    return 0;
+  }
+
+  const rightSet = new Set(right);
+  return left.filter((token) => rightSet.has(token)).length;
+}
+
+function getPublishedAtTimestamp(article: NormalizedArticle): number | null {
+  if (!article.publishedAtKnown || !article.publishedAt) {
+    return null;
+  }
+
+  const value = new Date(article.publishedAt).getTime();
+  return Number.isNaN(value) ? null : value;
+}
+
+function areLikelySameStory(left: NormalizedArticle, right: NormalizedArticle): boolean {
+  if (left.id === right.id || left.sourceUrl === right.sourceUrl) {
+    return true;
+  }
+
+  const normalizedLeftTitle = normalizeText(left.title);
+  const normalizedRightTitle = normalizeText(right.title);
+  if (normalizedLeftTitle === normalizedRightTitle) {
+    return true;
+  }
+
+  const leftTitleTokens = getStoryTokens(left.title);
+  const rightTitleTokens = getStoryTokens(right.title);
+  const sharedTitleTokenCount = getSharedTokenCount(leftTitleTokens, rightTitleTokens);
+
+  const leftContentTokens = getStoryTokens(`${left.title} ${left.summary}`);
+  const rightContentTokens = getStoryTokens(`${right.title} ${right.summary}`);
+  const sharedContentTokenCount = getSharedTokenCount(leftContentTokens, rightContentTokens);
+
+  const leftPublishedAt = getPublishedAtTimestamp(left);
+  const rightPublishedAt = getPublishedAtTimestamp(right);
+  const publishedGapHours = leftPublishedAt !== null && rightPublishedAt !== null
+    ? Math.abs(leftPublishedAt - rightPublishedAt) / 36e5
+    : null;
+  const sameCluster = detectTopicCluster(left) === detectTopicCluster(right);
+
+  if (sharedTitleTokenCount >= 2 && (publishedGapHours === null || publishedGapHours <= 72)) {
+    return true;
+  }
+
+  if (sameCluster && sharedTitleTokenCount >= 1 && publishedGapHours !== null && publishedGapHours <= 2) {
+    return true;
+  }
+
+  if (sameCluster && sharedContentTokenCount >= 3 && (publishedGapHours === null || publishedGapHours <= 48)) {
+    return true;
+  }
+
+  return false;
+}
+
 interface PriorCoverage {
   hardExcludedIds: Set<string>;
   hardExcludedUrls: Set<string>;
@@ -712,7 +788,11 @@ function selectArticlesForGeneration(
   const clusterCounts = new Map<string, number>();
   const layerCounts = new Map<FeedLayer, number>();
 
-  const addArticle = (article: NormalizedArticle) => {
+  const addArticle = (article: NormalizedArticle, options: { relaxDistribution?: boolean } = {}) => {
+    if (selected.some((selectedArticle) => areLikelySameStory(article, selectedArticle))) {
+      return false;
+    }
+
     const sourceCount = sourceCounts.get(article.source) ?? 0;
     const categoryCount = categoryCounts.get(article.category) ?? 0;
     const typeCount = typeCounts.get(article.type) ?? 0;
@@ -720,15 +800,15 @@ function selectArticlesForGeneration(
     const clusterCount = clusterCounts.get(cluster) ?? 0;
     const layerCount = layerCounts.get(article.layer) ?? 0;
 
-    if (sourceCount >= 4) {
+    if (!options.relaxDistribution && sourceCount >= 4) {
       return false;
     }
 
-    if (categoryCount >= 5) {
+    if (!options.relaxDistribution && categoryCount >= 5) {
       return false;
     }
 
-    if (article.type === "research" && typeCount >= 4) {
+    if (!options.relaxDistribution && article.type === "research" && typeCount >= 4) {
       return false;
     }
 
@@ -736,15 +816,15 @@ function selectArticlesForGeneration(
       return false;
     }
 
-    if (article.layer === "general-news" && layerCount >= 4) {
+    if (!options.relaxDistribution && article.layer === "general-news" && layerCount >= 4) {
       return false;
     }
 
-    if (article.layer === "official" && layerCount >= 6) {
+    if (!options.relaxDistribution && article.layer === "official" && layerCount >= 6) {
       return false;
     }
 
-    if (article.layer === "specialist-news" && layerCount >= 4) {
+    if (!options.relaxDistribution && article.layer === "specialist-news" && layerCount >= 4) {
       return false;
     }
 
@@ -813,7 +893,7 @@ function selectArticlesForGeneration(
       }
 
       if (!selected.some((selectedArticle) => selectedArticle.id === article.id)) {
-        selected.push(article);
+        addArticle(article, { relaxDistribution: true });
       }
     }
   }
