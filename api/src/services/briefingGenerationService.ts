@@ -500,6 +500,19 @@ function normalizeText(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9가-힣]+/g, " ").replace(/\s+/g, " ").trim();
 }
 
+function stripMarkup(value: string): string {
+  return value
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&[a-z0-9#]+;/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function getStoryText(article: Pick<NormalizedArticle, "title" | "summary" | "content">): string {
+  const cleanedContent = article.content ? stripMarkup(article.content).slice(0, 1600) : "";
+  return `${article.title} ${article.summary} ${cleanedContent}`.trim();
+}
+
 function getStoryTokens(value: string): string[] {
   return [...new Set(
     normalizeText(value)
@@ -542,8 +555,8 @@ function areLikelySameStory(left: NormalizedArticle, right: NormalizedArticle): 
   const rightTitleTokens = getStoryTokens(right.title);
   const sharedTitleTokenCount = getSharedTokenCount(leftTitleTokens, rightTitleTokens);
 
-  const leftContentTokens = getStoryTokens(`${left.title} ${left.summary}`);
-  const rightContentTokens = getStoryTokens(`${right.title} ${right.summary}`);
+  const leftContentTokens = getStoryTokens(getStoryText(left));
+  const rightContentTokens = getStoryTokens(getStoryText(right));
   const sharedContentTokenCount = getSharedTokenCount(leftContentTokens, rightContentTokens);
 
   const leftPublishedAt = getPublishedAtTimestamp(left);
