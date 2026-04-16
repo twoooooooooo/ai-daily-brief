@@ -774,18 +774,18 @@ function getImportanceSeedScore(importance: Briefing["issues"][number]["importan
 
 function getCategoryUrgencyScore(category: Briefing["issues"][number]["category"]): number {
   switch (category) {
-    case "Policy":
-      return 1.6;
-    case "Investment":
-      return 1.4;
-    case "Infrastructure":
-      return 1.2;
     case "Product":
-      return 1;
+      return 1.6;
     case "Model":
-      return 0.8;
+      return 1.45;
+    case "Investment":
+      return 1.25;
+    case "Infrastructure":
+      return 1.1;
+    case "Policy":
+      return 0.75;
     case "Research":
-      return 0.2;
+      return 0.35;
     default:
       return 0;
   }
