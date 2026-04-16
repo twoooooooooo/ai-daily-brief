@@ -587,6 +587,11 @@ interface ArticleScoreBreakdown {
   reasons: string[];
 }
 
+interface IssuePriorityBreakdown {
+  score: number;
+  normalizedImportance: Briefing["issues"][number]["importance"];
+}
+
 function buildPriorCoverage(priorBriefings: Briefing[], date: string): PriorCoverage {
   const hardExcludedIds = new Set<string>();
   const hardExcludedUrls = new Set<string>();
@@ -754,6 +759,139 @@ function seedClusterRepresentatives(scoredArticles: ArticleScoreBreakdown[]): Ar
 
     return right.impactScore - left.impactScore;
   });
+}
+
+function getImportanceSeedScore(importance: Briefing["issues"][number]["importance"]): number {
+  switch (importance) {
+    case "High":
+      return 2.5;
+    case "Medium":
+      return 1.2;
+    default:
+      return 0;
+  }
+}
+
+function getCategoryUrgencyScore(category: Briefing["issues"][number]["category"]): number {
+  switch (category) {
+    case "Policy":
+      return 1.6;
+    case "Investment":
+      return 1.4;
+    case "Infrastructure":
+      return 1.2;
+    case "Product":
+      return 1;
+    case "Model":
+      return 0.8;
+    case "Research":
+      return 0.2;
+    default:
+      return 0;
+  }
+}
+
+function getIssueRecencyUrgencyScore(issue: Pick<Briefing["issues"][number], "sourcePublishedAt" | "type">): number {
+  if (!issue.sourcePublishedAt) {
+    return issue.type === "research" ? 0.2 : 0;
+  }
+
+  const publishedAt = new Date(issue.sourcePublishedAt);
+  if (Number.isNaN(publishedAt.getTime())) {
+    return issue.type === "research" ? 0.2 : 0;
+  }
+
+  const ageHours = Math.max(0, (Date.now() - publishedAt.getTime()) / 36e5);
+  if (issue.type === "research") {
+    if (ageHours <= 24) return 1.2;
+    if (ageHours <= 72) return 0.8;
+    return 0.2;
+  }
+
+  if (ageHours <= 6) return 2.2;
+  if (ageHours <= 12) return 1.8;
+  if (ageHours <= 24) return 1.1;
+  if (ageHours <= 48) return 0.3;
+  return -0.6;
+}
+
+function normalizeIssueImportance(
+  issue: Pick<Briefing["issues"][number], "importance" | "category" | "sourcePublishedAt" | "type">,
+  scoreBreakdown?: ArticleScoreBreakdown,
+): IssuePriorityBreakdown {
+  const score = (scoreBreakdown?.totalScore ?? 0)
+    + getImportanceSeedScore(issue.importance)
+    + getCategoryUrgencyScore(issue.category)
+    + getIssueRecencyUrgencyScore(issue);
+
+  if (score >= 15.5) {
+    return {
+      score,
+      normalizedImportance: "High",
+    };
+  }
+
+  if (score >= 12.5) {
+    return {
+      score,
+      normalizedImportance: "Medium",
+    };
+  }
+
+  return {
+    score,
+    normalizedImportance: "Low",
+  };
+}
+
+function buildScoreLookup(entries: ArticleScoreBreakdown[]): Map<string, ArticleScoreBreakdown> {
+  const lookup = new Map<string, ArticleScoreBreakdown>();
+
+  for (const entry of entries) {
+    lookup.set(entry.article.id, entry);
+    lookup.set(entry.article.sourceUrl, entry);
+  }
+
+  return lookup;
+}
+
+function prioritizeBriefingIssues<T extends Briefing["issues"][number]>(
+  issues: T[],
+  scoreLookup: Map<string, ArticleScoreBreakdown>,
+): T[] {
+  return issues
+    .map((issue) => {
+      const scoreBreakdown = scoreLookup.get(issue.id) ?? scoreLookup.get(issue.sourceUrl);
+      const priority = normalizeIssueImportance(issue, scoreBreakdown);
+      return {
+        ...issue,
+        importance: priority.normalizedImportance,
+        __priorityScore: priority.score,
+      };
+    })
+    .sort((left, right) => {
+      if (right.__priorityScore !== left.__priorityScore) {
+        return right.__priorityScore - left.__priorityScore;
+      }
+
+      const rightPublishedAt = right.sourcePublishedAt ?? right.date;
+      const leftPublishedAt = left.sourcePublishedAt ?? left.date;
+      return rightPublishedAt.localeCompare(leftPublishedAt);
+    })
+    .map(({ __priorityScore: _priorityScore, ...issue }) => issue as T);
+}
+
+function prioritizeBriefingForDisplay(
+  briefing: Briefing,
+  scoreEntries: ArticleScoreBreakdown[],
+): Briefing {
+  const scoreLookup = buildScoreLookup(scoreEntries);
+
+  return {
+    ...briefing,
+    issues: prioritizeBriefingIssues(briefing.issues, scoreLookup),
+    researchHighlights: prioritizeBriefingIssues(briefing.researchHighlights, scoreLookup),
+  };
 }
 
 function selectArticlesForGeneration(
@@ -1201,13 +1339,14 @@ export async function generateDailyBriefing(input: GenerateBriefingInput): Promi
   const diagnosticArticles = [...candidateArticles]
     .map((article) => scoreArticleBreakdown(article, input.articles, buildPriorCoverage(input.priorBriefings ?? [], date), trendingSignals))
     .filter((entry): entry is ArticleScoreBreakdown => entry !== null);
+  const selectedScoreEntries = diagnosticArticles
+    .filter((entry) => selectedArticles.some((article) => article.id === entry.article.id));
   try {
     await recordBriefingSelectionDiagnostics({
       date,
       edition,
       selectedArticleCount: selectedArticles.length,
-      entries: diagnosticArticles
-        .filter((entry) => selectedArticles.some((article) => article.id === entry.article.id))
+      entries: selectedScoreEntries
         .sort((left, right) => right.totalScore - left.totalScore)
         .map((entry) => ({
           id: entry.article.id,
@@ -1236,6 +1375,7 @@ export async function generateDailyBriefing(input: GenerateBriefingInput): Promi
     edition,
   );
   briefing = enrichBriefingWithSourcePublishedAt(briefing, selectedArticles);
+  briefing = prioritizeBriefingForDisplay(briefing, selectedScoreEntries);
 
   if (needsKoreanLocalization(briefing)) {
     scopedLogger.info("Applying Korean display-field localization pass to generated briefing.", {
