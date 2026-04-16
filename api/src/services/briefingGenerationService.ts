@@ -26,6 +26,7 @@ interface GenerateBriefingInput {
 }
 
 const MAX_GENERATION_ARTICLES = 16;
+const MIN_GENERATION_TOTAL_SCORE = 0.5;
 const MAX_NEWS_AGE_HOURS = 48;
 const MAX_RESEARCH_AGE_HOURS = 168;
 const PRIORITY_SIGNAL_KEYWORDS = [
@@ -778,8 +779,10 @@ function selectArticlesForGeneration(
 
       return right.impactScore - left.impactScore;
     });
-  const rankedArticles = scoredArticles.map((entry) => entry.article);
-  const clusterRepresentatives = seedClusterRepresentatives(scoredArticles);
+  const viableScoredArticles = scoredArticles.filter((entry) => entry.totalScore >= MIN_GENERATION_TOTAL_SCORE);
+  const scoredSelectionPool = viableScoredArticles.length > 0 ? viableScoredArticles : scoredArticles;
+  const rankedArticles = scoredSelectionPool.map((entry) => entry.article);
+  const clusterRepresentatives = seedClusterRepresentatives(scoredSelectionPool);
 
   const selected: NormalizedArticle[] = [];
   const sourceCounts = new Map<string, number>();
