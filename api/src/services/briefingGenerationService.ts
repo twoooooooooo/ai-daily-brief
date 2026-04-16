@@ -54,7 +54,8 @@ const STORY_DUPLICATE_STOPWORDS = new Set([
   "launch", "launched", "release", "released", "introducing", "announces", "announced", "adds",
   "added", "openai", "google", "anthropic", "claude", "mistral", "cohere", "microsoft", "meta",
   "nvidia", "aws", "hugging", "face", "techcrunch", "wired", "verge", "review", "mit", "ai",
-  "gpt", "chatgpt", "gemini", "llm", "llms",
+  "gpt", "chatgpt", "gemini", "llm", "llms", "more", "next", "only", "why", "how", "use", "uses",
+  "like", "into", "through", "after", "before", "over", "under", "must", "never",
 ]);
 const SELECTION_SLOT_DEFINITIONS = [
   {
@@ -503,7 +504,7 @@ function getStoryTokens(value: string): string[] {
   return [...new Set(
     normalizeText(value)
       .split(" ")
-      .filter((token) => token.length >= 4)
+      .filter((token) => token.length >= 3)
       .filter((token) => !STORY_DUPLICATE_STOPWORDS.has(token)),
   )];
 }
@@ -560,7 +561,11 @@ function areLikelySameStory(left: NormalizedArticle, right: NormalizedArticle): 
     return true;
   }
 
-  if (sameCluster && sharedContentTokenCount >= 3 && (publishedGapHours === null || publishedGapHours <= 48)) {
+  if (sameCluster && sharedContentTokenCount >= 2 && (publishedGapHours === null || publishedGapHours <= 48)) {
+    return true;
+  }
+
+  if (sameCluster && sharedTitleTokenCount >= 1 && sharedContentTokenCount >= 1 && publishedGapHours !== null && publishedGapHours <= 24) {
     return true;
   }
 
@@ -576,6 +581,7 @@ interface PriorCoverage {
   recentTitles: Set<string>;
   recentKeywords: Set<string>;
   recentTopicClusters: Set<string>;
+  recentArticles: NormalizedArticle[];
 }
 
 interface ArticleScoreBreakdown {
@@ -592,6 +598,26 @@ interface IssuePriorityBreakdown {
   normalizedImportance: Briefing["issues"][number]["importance"];
 }
 
+function toComparableArticleFromIssue(issue: Briefing["issues"][number]): NormalizedArticle {
+  return {
+    id: issue.id,
+    title: issue.title,
+    source: issue.source,
+    sourceUrl: issue.sourceUrl,
+    publishedAt: issue.sourcePublishedAt ?? `${issue.date}T00:00:00.000Z`,
+    publishedAtKnown: Boolean(issue.sourcePublishedAt),
+    summary: issue.summary,
+    content: issue.summary,
+    type: issue.type,
+    category: issue.category,
+    region: issue.region,
+    layer: issue.type === "research" ? "research" : "general-news",
+    normalizedTitle: normalizeText(issue.title),
+    feedId: issue.source,
+    ingestedAt: `${issue.date}T00:00:00.000Z`,
+  };
+}
+
 function buildPriorCoverage(priorBriefings: Briefing[], date: string): PriorCoverage {
   const hardExcludedIds = new Set<string>();
   const hardExcludedUrls = new Set<string>();
@@ -601,6 +627,7 @@ function buildPriorCoverage(priorBriefings: Briefing[], date: string): PriorCove
   const recentTitles = new Set<string>();
   const recentKeywords = new Set<string>();
   const recentTopicClusters = new Set<string>();
+  const recentArticles: NormalizedArticle[] = [];
 
   for (const briefing of priorBriefings) {
     const articles = [...briefing.issues, ...briefing.researchHighlights];
@@ -608,27 +635,13 @@ function buildPriorCoverage(priorBriefings: Briefing[], date: string): PriorCove
 
     for (const article of articles) {
       const normalizedTitle = normalizeText(article.title);
+      const comparableArticle = toComparableArticleFromIssue(article);
+      recentArticles.push(comparableArticle);
       recentIds.add(article.id);
       recentUrls.add(article.sourceUrl);
       recentTitles.add(normalizedTitle);
       article.keywords.forEach((keyword) => recentKeywords.add(normalizeText(keyword)));
-      recentTopicClusters.add(detectTopicCluster({
-        id: article.id,
-        title: article.title,
-        source: article.source,
-        sourceUrl: article.sourceUrl,
-        publishedAt: article.sourcePublishedAt ?? `${article.date}T00:00:00.000Z`,
-        publishedAtKnown: Boolean(article.sourcePublishedAt),
-        summary: article.summary,
-        content: article.summary,
-        type: article.type,
-        category: article.category,
-        region: article.region,
-        layer: article.type === "research" ? "research" : "general-news",
-        normalizedTitle: normalizeText(article.title),
-        feedId: article.source,
-        ingestedAt: `${article.date}T00:00:00.000Z`,
-      }));
+      recentTopicClusters.add(detectTopicCluster(comparableArticle));
 
       if (isSameDay) {
         hardExcludedIds.add(article.id);
@@ -647,6 +660,7 @@ function buildPriorCoverage(priorBriefings: Briefing[], date: string): PriorCove
     recentTitles,
     recentKeywords,
     recentTopicClusters,
+    recentArticles,
   };
 }
 
@@ -683,6 +697,10 @@ function getOverlapPenalty(article: NormalizedArticle, priorCoverage: PriorCover
 
   if (priorCoverage.recentTopicClusters.has(detectTopicCluster(article))) {
     penalty += 1.5;
+  }
+
+  if (priorCoverage.recentArticles.some((recentArticle) => areLikelySameStory(article, recentArticle))) {
+    penalty += 6;
   }
 
   return penalty;
