@@ -35,7 +35,7 @@ const MailingListPanel = () => {
   };
 
   return (
-    <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+    <section id="mailing-list" className="mx-auto max-w-7xl scroll-mt-24 px-4 py-8 sm:px-6 lg:px-8">
       <div className="rounded-2xl border border-border bg-card shadow-card overflow-hidden">
         <div className="grid gap-0 lg:grid-cols-[1.15fr_0.85fr]">
           <div className="border-b border-border px-6 py-7 lg:border-b-0 lg:border-r sm:px-8">
@@ -47,7 +47,7 @@ const MailingListPanel = () => {
               브리핑을 메일로 받아보세요
             </h3>
             <p className="mt-3 max-w-2xl text-sm leading-7 text-muted-foreground">
-              매일 생성된 Global AI Daily Brief를 메일로 받아볼 수 있습니다. 구독 요청 후에는 확인 메일이 발송되고, 메일 안의 링크를 눌러야 실제 구독이 활성화됩니다. 구독 취소는 이 화면에서 바로 처리되며, 기존 메일 하단의 해지 링크도 계속 사용할 수 있습니다.
+              매일 생성된 Global AI Daily Brief를 메일로 받아볼 수 있습니다. 구독과 해지는 이 화면에서 바로 처리되며, 기존에 받은 메일 하단의 구독 취소 링크도 계속 사용할 수 있습니다.
             </p>
           </div>
 
@@ -86,7 +86,7 @@ const MailingListPanel = () => {
             </div>
 
             <p className="mt-3 text-xs leading-6 text-muted-foreground">
-              같은 이메일을 다시 등록하면 중복으로 쌓이지 않고, 이미 등록된 주소는 안내 문구만 표시되거나 확인 메일만 다시 발송됩니다.
+              같은 이메일을 다시 등록해도 중복으로 쌓이지 않고 기존 구독 상태만 갱신됩니다.
             </p>
 
             {status && !error && (
