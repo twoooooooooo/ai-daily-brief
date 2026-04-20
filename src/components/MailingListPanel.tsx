@@ -35,7 +35,7 @@ const MailingListPanel = () => {
   };
 
   return (
-    <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+    <section id="mailing-list" className="mx-auto max-w-7xl scroll-mt-24 px-4 py-8 sm:px-6 lg:px-8">
       <div className="rounded-2xl border border-border bg-card shadow-card overflow-hidden">
         <div className="grid gap-0 lg:grid-cols-[1.15fr_0.85fr]">
           <div className="border-b border-border px-6 py-7 lg:border-b-0 lg:border-r sm:px-8">
