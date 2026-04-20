@@ -49,10 +49,22 @@ function getImportanceWeight(importance: Importance): number {
   }
 }
 
-function getDisplayPriority(issue: Issue): number {
+type DomesticPreference = "prefer-domestic" | "prefer-global" | "neutral";
+
+function getDisplayPriority(issue: Issue, domesticPreference: DomesticPreference): number {
   const publishedAt = getPublishedAtTimestamp(issue);
   const recencyWeight = publishedAt ? Math.max(0, 1 - ((Date.now() - publishedAt) / 36e5 / 72)) : 0;
-  return (isDomesticSourceName(issue.source) ? 3 : 0) + getImportanceWeight(issue.importance) + recencyWeight;
+
+  let domesticWeight = 0;
+  if (domesticPreference === "prefer-domestic" && isDomesticSourceName(issue.source)) {
+    domesticWeight = 3;
+  }
+
+  if (domesticPreference === "prefer-global" && !isDomesticSourceName(issue.source)) {
+    domesticWeight = 3;
+  }
+
+  return domesticWeight + getImportanceWeight(issue.importance) + recencyWeight;
 }
 
 export function areLikelySameDisplayStory(left: Issue, right: Issue): boolean {
@@ -95,7 +107,13 @@ export function areLikelySameDisplayStory(left: Issue, right: Issue): boolean {
   return false;
 }
 
-export function dedupeNewsForDisplay(issues: Issue[]): Issue[] {
+export function dedupeNewsForDisplay(
+  issues: Issue[],
+  options: {
+    domesticPreference?: DomesticPreference;
+  } = {},
+): Issue[] {
+  const domesticPreference = options.domesticPreference ?? "neutral";
   const selected: Issue[] = [];
 
   for (const issue of issues) {
@@ -106,10 +124,10 @@ export function dedupeNewsForDisplay(issues: Issue[]): Issue[] {
     }
 
     const existing = selected[duplicateIndex];
-    if (getDisplayPriority(issue) > getDisplayPriority(existing)) {
+    if (getDisplayPriority(issue, domesticPreference) > getDisplayPriority(existing, domesticPreference)) {
       selected[duplicateIndex] = issue;
     }
   }
 
-  return selected.sort((left, right) => getDisplayPriority(right) - getDisplayPriority(left));
+  return selected.sort((left, right) => getDisplayPriority(right, domesticPreference) - getDisplayPriority(left, domesticPreference));
 }

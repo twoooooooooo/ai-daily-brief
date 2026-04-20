@@ -3,7 +3,7 @@ import { useMemo, useState, useCallback } from "react";
 import { fetchBriefing, filterArticles, fetchBriefingById, searchArchiveBriefings } from "@/services/briefingService";
 import type { ArticleFilters, ArchiveFilters } from "@/types";
 import { isDomesticSourceName } from "@/lib/domesticSources";
-import { dedupeNewsForDisplay } from "@/lib/storyDedup";
+import { areLikelySameDisplayStory, dedupeNewsForDisplay } from "@/lib/storyDedup";
 
 const BRIEFING_QUERY_KEY = ["briefing"] as const;
 
@@ -24,24 +24,30 @@ export function useFilteredArticles() {
   const trendingTopics = data?.trendingTopics ?? [];
   const trendingTopicsEn = data?.trendingTopicsEn ?? [];
   const filtered = useMemo(() => filterArticles(data?.articles ?? [], filters), [data?.articles, filters]);
-  const newsArticles = useMemo(
-    () => dedupeNewsForDisplay(filtered.filter((a) => a.type === "news")),
-    [filtered],
-  );
+  const rawNewsArticles = useMemo(() => filtered.filter((a) => a.type === "news"), [filtered]);
   const domesticNewsArticles = useMemo(
-    () => newsArticles.filter((article) => isDomesticSourceName(article.source)),
-    [newsArticles],
+    () => rawNewsArticles.filter((article) => isDomesticSourceName(article.source)),
+    [rawNewsArticles],
   );
   const globalNewsArticles = useMemo(
-    () => newsArticles.filter((article) => !isDomesticSourceName(article.source)),
-    [newsArticles],
+    () => dedupeNewsForDisplay(
+      rawNewsArticles.filter((article) => !isDomesticSourceName(article.source)),
+      { domesticPreference: "prefer-global" },
+    ),
+    [rawNewsArticles],
   );
+  const domesticSupplementArticles = useMemo(
+    () => dedupeNewsForDisplay(domesticNewsArticles)
+      .filter((article) => !globalNewsArticles.some((globalArticle) => areLikelySameDisplayStory(article, globalArticle))),
+    [domesticNewsArticles, globalNewsArticles],
+  );
+  const newsArticles = useMemo(() => [...globalNewsArticles, ...domesticSupplementArticles], [globalNewsArticles, domesticSupplementArticles]);
   const researchArticles = useMemo(() => filtered.filter((a) => a.type === "research"), [filtered]);
   const handleRefresh = useCallback(() => { refetch(); }, [refetch]);
 
   return {
     data,
-    isLoading, isError, error, summary, trendingTopics, trendingTopicsEn, filtered, newsArticles, domesticNewsArticles, globalNewsArticles, researchArticles, filters, setFilters,
+    isLoading, isError, error, summary, trendingTopics, trendingTopicsEn, filtered, newsArticles, domesticNewsArticles: domesticSupplementArticles, globalNewsArticles, researchArticles, filters, setFilters,
     setSearch: (search: string) => setFilters((f) => ({ ...f, search })),
     setCategory: (category: string) => setFilters((f) => ({ ...f, category })),
     setRegion: (region: string) => setFilters((f) => ({ ...f, region })),
