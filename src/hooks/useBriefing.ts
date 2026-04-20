@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState, useCallback } from "react";
 import { fetchBriefing, filterArticles, fetchBriefingById, searchArchiveBriefings } from "@/services/briefingService";
 import type { ArticleFilters, ArchiveFilters } from "@/types";
-import { isDomesticSourceName } from "@/lib/domesticSources";
+import { getDomesticStoryPriority, isDomesticSourceName, isDomesticSpecificStory } from "@/lib/domesticSources";
 import { areLikelySameDisplayStory, dedupeNewsForDisplay } from "@/lib/storyDedup";
 
 const BRIEFING_QUERY_KEY = ["briefing"] as const;
@@ -38,7 +38,9 @@ export function useFilteredArticles() {
   );
   const domesticSupplementArticles = useMemo(
     () => dedupeNewsForDisplay(domesticNewsArticles)
-      .filter((article) => !globalNewsArticles.some((globalArticle) => areLikelySameDisplayStory(article, globalArticle))),
+      .filter((article) => isDomesticSpecificStory(article))
+      .filter((article) => !globalNewsArticles.some((globalArticle) => areLikelySameDisplayStory(article, globalArticle)))
+      .sort((left, right) => getDomesticStoryPriority(right) - getDomesticStoryPriority(left)),
     [domesticNewsArticles, globalNewsArticles],
   );
   const newsArticles = useMemo(() => [...globalNewsArticles, ...domesticSupplementArticles], [globalNewsArticles, domesticSupplementArticles]);
