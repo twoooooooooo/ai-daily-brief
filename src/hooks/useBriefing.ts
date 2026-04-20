@@ -3,6 +3,7 @@ import { useMemo, useState, useCallback } from "react";
 import { fetchBriefing, filterArticles, fetchBriefingById, searchArchiveBriefings } from "@/services/briefingService";
 import type { ArticleFilters, ArchiveFilters } from "@/types";
 import { isDomesticSourceName } from "@/lib/domesticSources";
+import { dedupeNewsForDisplay } from "@/lib/storyDedup";
 
 const BRIEFING_QUERY_KEY = ["briefing"] as const;
 
@@ -23,7 +24,10 @@ export function useFilteredArticles() {
   const trendingTopics = data?.trendingTopics ?? [];
   const trendingTopicsEn = data?.trendingTopicsEn ?? [];
   const filtered = useMemo(() => filterArticles(data?.articles ?? [], filters), [data?.articles, filters]);
-  const newsArticles = useMemo(() => filtered.filter((a) => a.type === "news"), [filtered]);
+  const newsArticles = useMemo(
+    () => dedupeNewsForDisplay(filtered.filter((a) => a.type === "news")),
+    [filtered],
+  );
   const domesticNewsArticles = useMemo(
     () => newsArticles.filter((article) => isDomesticSourceName(article.source)),
     [newsArticles],

@@ -109,26 +109,6 @@ const Index = () => {
           <EmptyState />
         ) : (
           <>
-            {globalNewsArticles.length > 0 && (
-              <section className="mb-14">
-                <div className="flex items-center justify-between mb-6">
-                  <div className="flex items-center gap-2">
-                    <div className="h-5 w-1 rounded-full bg-accent" />
-                    <h2 className="font-display text-lg font-semibold text-foreground">오늘의 주요 동향</h2>
-                    <span className="text-xs text-muted-foreground ml-1">{globalNewsArticles.length}건 선별</span>
-                  </div>
-                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground/50 hidden sm:block">
-                    Curated · {new Date().toLocaleDateString("ko-KR", { month: "short", day: "numeric" })}
-                  </span>
-                </div>
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  {globalNewsArticles.map((article, i) => (
-                    <IssueCard key={article.id} article={article} index={i} onClick={() => setSelectedArticle(article)} />
-                  ))}
-                </div>
-              </section>
-            )}
-
             {domesticNewsArticles.length > 0 && (
               <section className="mb-14">
                 <div className="flex items-center justify-between mb-6">
@@ -138,11 +118,31 @@ const Index = () => {
                     <span className="text-xs text-muted-foreground ml-1">{domesticNewsArticles.length}건 선별</span>
                   </div>
                   <span className="text-[10px] uppercase tracking-wider text-muted-foreground/50 hidden sm:block">
-                    Korea · Domestic AI
+                    Korea · Primary View
                   </span>
                 </div>
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   {domesticNewsArticles.map((article, i) => (
+                    <IssueCard key={article.id} article={article} index={i} onClick={() => setSelectedArticle(article)} />
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {globalNewsArticles.length > 0 && (
+              <section className="mb-14">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-2">
+                    <div className="h-5 w-1 rounded-full bg-accent" />
+                    <h2 className="font-display text-lg font-semibold text-foreground">글로벌 동향</h2>
+                    <span className="text-xs text-muted-foreground ml-1">{globalNewsArticles.length}건 선별</span>
+                  </div>
+                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground/50 hidden sm:block">
+                    Global · Not covered domestically
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  {globalNewsArticles.map((article, i) => (
                     <IssueCard key={article.id} article={article} index={i} onClick={() => setSelectedArticle(article)} />
                   ))}
                 </div>
