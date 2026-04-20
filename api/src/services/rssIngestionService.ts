@@ -32,7 +32,20 @@ interface ParsedFeedItem {
   summary?: string;
   content?: string;
   "content:encoded"?: string;
+  category?: string | string[] | { "#text"?: string } | Array<{ "#text"?: string }>;
   source?: string | { "#text"?: string };
+}
+
+interface LgAiResearchApiListResponse {
+  data?: {
+    list?: Array<{
+      seq?: number;
+      ttl?: string;
+      cont?: string;
+      description?: string;
+      expsYmd?: string;
+    }>;
+  };
 }
 
 const xmlParser = new XMLParser({
@@ -56,6 +69,10 @@ function normalizeWhitespace(value: string): string {
   return value.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 }
 
+function stripMarkup(value: string): string {
+  return value.replace(/<[^>]+>/g, " ").trim();
+}
+
 function normalizeTitle(value: string): string {
   return normalizeWhitespace(value).toLowerCase();
 }
@@ -72,13 +89,15 @@ function toArray<T>(value: T | T[] | undefined): T[] {
   return Array.isArray(value) ? value : [value];
 }
 
-function resolveItemLink(link: ParsedFeedItem["link"]): string {
+function resolveItemLink(feed: RssFeedConfig, link: ParsedFeedItem["link"]): string {
   if (!link) return "";
-  if (typeof link === "string") return link.trim();
+  if (typeof link === "string") {
+    return resolveAbsoluteUrl(feed, link.trim());
+  }
 
   const links = toArray(link);
   const alternateLink = links.find((item) => item["@_rel"] === "alternate") ?? links[0];
-  return (alternateLink?.["@_href"] ?? alternateLink?.["#text"] ?? "").trim();
+  return resolveAbsoluteUrl(feed, (alternateLink?.["@_href"] ?? alternateLink?.["#text"] ?? "").trim());
 }
 
 function resolveItemSource(feed: RssFeedConfig, item: ParsedFeedItem): string {
@@ -102,7 +121,7 @@ function resolvePublishedAt(item: ParsedFeedItem): {
     return { value: undefined, known: false };
   }
 
-  const parsed = new Date(rawDate);
+  const parsed = parsePublishedAtValue(rawDate);
   if (Number.isNaN(parsed.getTime())) {
     return { value: undefined, known: false };
   }
@@ -138,6 +157,58 @@ function buildArticleId(feed: RssFeedConfig, title: string, publishedAt?: string
   return `${feed.id}-${slugify(title)}-${publishedAt?.slice(0, 10) ?? "undated"}`;
 }
 
+function resolveAbsoluteUrl(feed: RssFeedConfig, value: string): string {
+  if (!value) {
+    return "";
+  }
+
+  try {
+    return new URL(value, feed.linkBaseUrl ?? feed.url).toString();
+  } catch {
+    return value;
+  }
+}
+
+function parseKoreanPeriodDate(value: string): Date | null {
+  const match = value.trim().match(/^(\d{4})-(\d{2})-(\d{2})\s+(오전|오후)\s+(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+  if (!match) {
+    return null;
+  }
+
+  const [, year, month, day, period, hourText, minute, second = "00"] = match;
+  const rawHour = Number(hourText);
+  let hour = rawHour % 12;
+  if (period === "오후") {
+    hour += 12;
+  }
+
+  return new Date(`${year}-${month}-${day}T${String(hour).padStart(2, "0")}:${minute}:${second}+09:00`);
+}
+
+function parseCompactKoreanDate(value: string): Date | null {
+  const match = value.trim().match(/^(\d{4})(\d{2})(\d{2})$/);
+  if (!match) {
+    return null;
+  }
+
+  const [, year, month, day] = match;
+  return new Date(`${year}-${month}-${day}T00:00:00+09:00`);
+}
+
+function parsePublishedAtValue(value: string): Date {
+  const koreanPeriodDate = parseKoreanPeriodDate(value);
+  if (koreanPeriodDate) {
+    return koreanPeriodDate;
+  }
+
+  const compactKoreanDate = parseCompactKoreanDate(value);
+  if (compactKoreanDate) {
+    return compactKoreanDate;
+  }
+
+  return new Date(value);
+}
+
 function getArticleSortTimestamp(article: NormalizedArticle): string {
   return article.publishedAt ?? article.ingestedAt;
 }
@@ -150,7 +221,7 @@ function extractFeedItems(parsedXml: ParsedRssRoot): ParsedFeedItem[] {
 
 function normalizeFeedItem(feed: RssFeedConfig, item: ParsedFeedItem): NormalizedArticle | null {
   const title = normalizeWhitespace(item.title ?? "");
-  const sourceUrl = resolveItemLink(item.link);
+  const sourceUrl = resolveItemLink(feed, item.link);
 
   if (!title || !sourceUrl) {
     return null;
@@ -174,6 +245,32 @@ function normalizeFeedItem(feed: RssFeedConfig, item: ParsedFeedItem): Normalize
     feedId: feed.id,
     ingestedAt: new Date().toISOString(),
   };
+}
+
+function matchesKeywordFilter(feed: RssFeedConfig, article: NormalizedArticle): boolean {
+  if (!feed.keywordFilters || feed.keywordFilters.length === 0) {
+    return true;
+  }
+
+  const normalizedText = normalizeTitle(`${article.title} ${article.summary} ${article.content ?? ""} ${article.source}`);
+  const textTokens = new Set(normalizedText.split(" ").filter(Boolean));
+
+  return feed.keywordFilters.some((keyword) => {
+    const normalizedKeyword = normalizeTitle(keyword);
+    if (!normalizedKeyword) {
+      return false;
+    }
+
+    if (normalizedKeyword.includes(" ")) {
+      return normalizedText.includes(normalizedKeyword);
+    }
+
+    if (normalizedKeyword.length <= 2) {
+      return textTokens.has(normalizedKeyword);
+    }
+
+    return normalizedText.includes(normalizedKeyword) || textTokens.has(normalizedKeyword);
+  });
 }
 
 async function fetchFeedXml(feed: RssFeedConfig): Promise<string> {
@@ -342,8 +439,66 @@ function parseCohereChangelog(feed: RssFeedConfig, html: string): NormalizedArti
   return [...articles.values()].sort((left, right) => getArticleSortTimestamp(right).localeCompare(getArticleSortTimestamp(left)));
 }
 
+function parseLgAiResearchApi(feed: RssFeedConfig, payloadText: string): NormalizedArticle[] {
+  let payload: LgAiResearchApiListResponse;
+
+  try {
+    payload = JSON.parse(payloadText) as LgAiResearchApiListResponse;
+  } catch (error) {
+    throw new RssIngestionError(`Failed to parse LG AI Research API payload: ${feed.id}`, error);
+  }
+
+  const entries = payload.data?.list ?? [];
+  const articles = new Map<string, NormalizedArticle>();
+
+  for (const entry of entries) {
+    const title = normalizeWhitespace(entry.ttl ?? "");
+    if (!title || typeof entry.seq !== "number") {
+      continue;
+    }
+
+    const publishedAt = entry.expsYmd ? parsePublishedAtValue(entry.expsYmd).toISOString() : undefined;
+    const summarySource = entry.description?.trim() || entry.cont || "";
+    const summary = normalizeWhitespace(stripMarkup(summarySource)).slice(0, 420);
+    const content = stripMarkup(entry.cont ?? "");
+    const sourceUrl = `https://www.lgresearch.ai/news/view?seq=${entry.seq}`;
+
+    const article: NormalizedArticle = {
+      id: buildArticleId(feed, title, publishedAt),
+      title,
+      source: feed.source,
+      sourceUrl,
+      publishedAt,
+      publishedAtKnown: Boolean(publishedAt),
+      summary,
+      content: content || undefined,
+      type: feed.kind,
+      category: feed.category,
+      region: feed.region,
+      layer: feed.layer ?? (feed.kind === "research" ? "research" : "general-news"),
+      normalizedTitle: normalizeTitle(title),
+      feedId: feed.id,
+      ingestedAt: new Date().toISOString(),
+    };
+
+    articles.set(createArticleStoreKey(article), article);
+  }
+
+  return [...articles.values()].sort((left, right) => getArticleSortTimestamp(right).localeCompare(getArticleSortTimestamp(left)));
+}
+
 async function ingestFeed(feed: RssFeedConfig): Promise<NormalizedArticle[]> {
   logger.info("Starting RSS feed ingestion.", { feedId: feed.id, url: feed.url });
+
+  if (feed.format === "lg-ai-research-api") {
+    const normalizedArticles = parseLgAiResearchApi(feed, await fetchFeedXml(feed));
+    logger.info("Completed LG AI Research API ingestion.", {
+      feedId: feed.id,
+      discoveredArticles: normalizedArticles.length,
+    });
+    return normalizedArticles;
+  }
+
   const body = await fetchFeedXml(feed);
 
   if (feed.format === "anthropic-newsroom") {
@@ -382,7 +537,8 @@ async function ingestFeed(feed: RssFeedConfig): Promise<NormalizedArticle[]> {
 
   const normalizedArticles = extractFeedItems(parsedXml)
     .map((item) => normalizeFeedItem(feed, item))
-    .filter((article): article is NormalizedArticle => article !== null);
+    .filter((article): article is NormalizedArticle => article !== null)
+    .filter((article) => matchesKeywordFilter(feed, article));
 
   logger.info("Completed RSS feed ingestion.", {
     feedId: feed.id,

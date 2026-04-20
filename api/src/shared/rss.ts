@@ -1,7 +1,7 @@
 import type { ArticleType, Category, Region } from "./contracts.js";
 
 export type FeedKind = ArticleType;
-export type FeedFormat = "rss" | "anthropic-newsroom" | "mistral-newsroom" | "cohere-changelog";
+export type FeedFormat = "rss" | "anthropic-newsroom" | "mistral-newsroom" | "cohere-changelog" | "lg-ai-research-api";
 export type FeedLayer = "general-news" | "specialist-news" | "official" | "research";
 
 export interface RssFeedConfig {
@@ -14,6 +14,8 @@ export interface RssFeedConfig {
   category: Category;
   region: Region;
   source: string;
+  linkBaseUrl?: string;
+  keywordFilters?: readonly string[];
 }
 
 export interface NormalizedArticle {

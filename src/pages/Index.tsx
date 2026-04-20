@@ -21,7 +21,7 @@ const Index = () => {
   const [showEnglishSummary, setShowEnglishSummary] = useState(false);
   const {
     data,
-    isLoading, isError, error, summary, trendingTopics, trendingTopicsEn, filtered, newsArticles, researchArticles,
+    isLoading, isError, error, summary, trendingTopics, trendingTopicsEn, filtered, newsArticles, domesticNewsArticles, globalNewsArticles, researchArticles,
     filters, setSearch, setCategory, setRegion, setImportance, refetch,
   } = useFilteredArticles();
 
@@ -109,20 +109,40 @@ const Index = () => {
           <EmptyState />
         ) : (
           <>
-            {newsArticles.length > 0 && (
+            {globalNewsArticles.length > 0 && (
               <section className="mb-14">
                 <div className="flex items-center justify-between mb-6">
                   <div className="flex items-center gap-2">
                     <div className="h-5 w-1 rounded-full bg-accent" />
                     <h2 className="font-display text-lg font-semibold text-foreground">오늘의 주요 동향</h2>
-                    <span className="text-xs text-muted-foreground ml-1">{newsArticles.length}건 선별</span>
+                    <span className="text-xs text-muted-foreground ml-1">{globalNewsArticles.length}건 선별</span>
                   </div>
                   <span className="text-[10px] uppercase tracking-wider text-muted-foreground/50 hidden sm:block">
                     Curated · {new Date().toLocaleDateString("ko-KR", { month: "short", day: "numeric" })}
                   </span>
                 </div>
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  {newsArticles.map((article, i) => (
+                  {globalNewsArticles.map((article, i) => (
+                    <IssueCard key={article.id} article={article} index={i} onClick={() => setSelectedArticle(article)} />
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {domesticNewsArticles.length > 0 && (
+              <section className="mb-14">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-2">
+                    <div className="h-5 w-1 rounded-full bg-cat-investment" />
+                    <h2 className="font-display text-lg font-semibold text-foreground">국내 동향</h2>
+                    <span className="text-xs text-muted-foreground ml-1">{domesticNewsArticles.length}건 선별</span>
+                  </div>
+                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground/50 hidden sm:block">
+                    Korea · Domestic AI
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  {domesticNewsArticles.map((article, i) => (
                     <IssueCard key={article.id} article={article} index={i} onClick={() => setSelectedArticle(article)} />
                   ))}
                 </div>

@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState, useCallback } from "react";
 import { fetchBriefing, filterArticles, fetchBriefingById, searchArchiveBriefings } from "@/services/briefingService";
 import type { ArticleFilters, ArchiveFilters } from "@/types";
+import { isDomesticSourceName } from "@/lib/domesticSources";
 
 const BRIEFING_QUERY_KEY = ["briefing"] as const;
 
@@ -23,12 +24,20 @@ export function useFilteredArticles() {
   const trendingTopicsEn = data?.trendingTopicsEn ?? [];
   const filtered = useMemo(() => filterArticles(data?.articles ?? [], filters), [data?.articles, filters]);
   const newsArticles = useMemo(() => filtered.filter((a) => a.type === "news"), [filtered]);
+  const domesticNewsArticles = useMemo(
+    () => newsArticles.filter((article) => isDomesticSourceName(article.source)),
+    [newsArticles],
+  );
+  const globalNewsArticles = useMemo(
+    () => newsArticles.filter((article) => !isDomesticSourceName(article.source)),
+    [newsArticles],
+  );
   const researchArticles = useMemo(() => filtered.filter((a) => a.type === "research"), [filtered]);
   const handleRefresh = useCallback(() => { refetch(); }, [refetch]);
 
   return {
     data,
-    isLoading, isError, error, summary, trendingTopics, trendingTopicsEn, filtered, newsArticles, researchArticles, filters, setFilters,
+    isLoading, isError, error, summary, trendingTopics, trendingTopicsEn, filtered, newsArticles, domesticNewsArticles, globalNewsArticles, researchArticles, filters, setFilters,
     setSearch: (search: string) => setFilters((f) => ({ ...f, search })),
     setCategory: (category: string) => setFilters((f) => ({ ...f, category })),
     setRegion: (region: string) => setFilters((f) => ({ ...f, region })),

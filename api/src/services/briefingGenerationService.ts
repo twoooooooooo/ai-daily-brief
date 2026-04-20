@@ -15,6 +15,7 @@ import { createLogger, type LogContext } from "../utils/logger.js";
 import { withRetry } from "../utils/retry.js";
 import { fetchGitHubTrendingSignals, type GitHubTrendingSignal } from "./githubTrendingSignalService.js";
 import { recordBriefingSelectionDiagnostics } from "./briefingSelectionDiagnosticsService.js";
+import { isDomesticSourceName } from "../config/domesticSources.js";
 const logger = createLogger("briefing-generation");
 
 interface GenerateBriefingInput {
@@ -58,6 +59,10 @@ const STORY_DUPLICATE_STOPWORDS = new Set([
   "like", "into", "through", "after", "before", "over", "under", "must", "never",
 ]);
 const SELECTION_SLOT_DEFINITIONS = [
+  {
+    id: "domestic-trend",
+    matches: (article: NormalizedArticle) => article.type === "news" && isDomesticSourceName(article.source),
+  },
   {
     id: "market-infrastructure",
     matches: (article: NormalizedArticle) => article.category === "Investment" || article.category === "Infrastructure",
@@ -259,6 +264,13 @@ function buildOpenAIHeaders(): Record<string, string> {
 function getSourcePriority(article: NormalizedArticle): number {
   const source = article.source.toLowerCase();
 
+  if (source.includes("lg ai research")) return 3.42;
+  if (source.includes("전자신문")) return 3.33;
+  if (source.includes("zdnet korea")) return 3.24;
+  if (source.includes("ai타임스")) return 3.26;
+  if (source.includes("skt 뉴스룸")) return 3.18;
+  if (source.includes("삼성sds")) return 3.16;
+  if (source.includes("naver d2")) return 3.2;
   if (source.includes("anthropic")) return 3.45;
   if (source.includes("techcrunch")) return 3.5;
   if (source.includes("wired")) return 3.35;
@@ -281,6 +293,17 @@ function getSourcePriority(article: NormalizedArticle): number {
 function getSourceReason(article: NormalizedArticle): string | null {
   const source = article.source.toLowerCase();
 
+  if (
+    source.includes("전자신문")
+    || source.includes("zdnet korea")
+    || source.includes("ai타임스")
+    || source.includes("skt 뉴스룸")
+    || source.includes("삼성sds")
+    || source.includes("naver d2")
+    || source.includes("lg ai research")
+  ) {
+    return "국내 주요 AI/IT 동향 소스";
+  }
   if (source.includes("anthropic") || source.includes("openai") || source.includes("mistral") || source.includes("cohere")) {
     return "공식 AI 기업 발표 소스";
   }
