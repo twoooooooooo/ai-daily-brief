@@ -78,6 +78,7 @@ export interface BriefingOperationalStatus {
   };
   subscribers?: {
     active: number;
+    pending: number;
     total: number;
     provider: "blob" | "file";
   };

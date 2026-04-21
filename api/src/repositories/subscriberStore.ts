@@ -5,13 +5,16 @@ import { getEnvironmentSettings, getSubscriberStorageSettings } from "../config/
 
 export interface SubscriberRecord {
   email: string;
-  status: "active" | "unsubscribed";
+  status: "pending" | "active" | "unsubscribed";
   createdAt: string;
   updatedAt: string;
   source: "website";
 }
 
 export type SubscriberUpsertAction =
+  | "created-pending"
+  | "reactivated-pending"
+  | "already-pending"
   | "created"
   | "reactivated"
   | "already-active"
@@ -128,6 +131,13 @@ export async function upsertSubscriber(
 
   if (existing) {
     if (existing.status === status) {
+      if (status === "pending") {
+        return {
+          action: "already-pending",
+          subscriber: cloneRecord(existing),
+        };
+      }
+
       return {
         action: status === "active" ? "already-active" : "already-unsubscribed",
         subscriber: cloneRecord(existing),
@@ -138,7 +148,11 @@ export async function upsertSubscriber(
     existing.updatedAt = now;
     await saveStore(store);
     return {
-      action: status === "active" ? "reactivated" : "deactivated",
+      action: status === "pending"
+        ? "reactivated-pending"
+        : status === "active"
+          ? "reactivated"
+          : "deactivated",
       subscriber: cloneRecord(existing),
     };
   }
@@ -160,7 +174,7 @@ export async function upsertSubscriber(
   store.subscribers.push(nextRecord);
   await saveStore(store);
   return {
-    action: "created",
+    action: status === "pending" ? "created-pending" : "created",
     subscriber: cloneRecord(nextRecord),
   };
 }
@@ -180,11 +194,13 @@ export async function getSubscriberByEmail(email: string): Promise<SubscriberRec
   return subscriber ? cloneRecord(subscriber) : null;
 }
 
-export async function getSubscriberStats(): Promise<{ active: number; total: number; provider: "blob" | "file" }> {
+export async function getSubscriberStats(): Promise<{ active: number; pending: number; total: number; provider: "blob" | "file" }> {
   const store = await loadStore();
   const active = store.subscribers.filter((subscriber) => subscriber.status === "active").length;
+  const pending = store.subscribers.filter((subscriber) => subscriber.status === "pending").length;
   return {
     active,
+    pending,
     total: store.subscribers.length,
     provider: shouldUseBlobStorage() ? "blob" : "file",
   };
