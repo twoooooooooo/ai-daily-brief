@@ -13,6 +13,7 @@ import { DailyBriefingPipelineError, runDailyBriefingPipeline } from "../service
 import { getBriefingByDateAndEdition, getLatestBriefingForEdition, saveBriefingWithOptions } from "../services/briefingRepository.js";
 import { sendBriefingEmail } from "../services/briefingEmailService.js";
 import { ingestConfiguredRssFeeds } from "../services/rssIngestionService.js";
+import { getSubscriberByEmail } from "../repositories/subscriberStore.js";
 import type { BriefingEdition } from "../shared/contracts.js";
 import type { NormalizedArticle } from "../shared/rss.js";
 import { createCorrelationId, createLogger } from "../utils/logger.js";
@@ -582,6 +583,40 @@ export async function sendBriefingEmailHandler(
   });
 }
 
+export async function getSubscriberStatusHandler(
+  request: HttpRequest,
+  context: InvocationContext,
+): Promise<HttpResponseInit> {
+  return handleAdminRequest(context, "getSubscriberStatus", async (logContext) => {
+    const adminKey = request.query.get("adminKey");
+    const payload = adminKey ? { adminApiKey: adminKey } : {};
+
+    if (!isAuthorizedAdminRequest(request, payload)) {
+      logger.child(logContext).warn("Rejected unauthorized admin request.");
+      return unauthorizedResponse("Unauthorized admin operation.");
+    }
+
+    const email = request.query.get("email")?.trim().toLowerCase();
+    if (!email || !isValidEmail(email)) {
+      return badRequestResponse("A valid email query parameter is required.");
+    }
+
+    const subscriber = await getSubscriberByEmail(email);
+    return jsonResponse({
+      found: Boolean(subscriber),
+      subscriber: subscriber
+        ? {
+            email: subscriber.email,
+            status: subscriber.status,
+            createdAt: subscriber.createdAt,
+            updatedAt: subscriber.updatedAt,
+            source: subscriber.source,
+          }
+        : null,
+    });
+  });
+}
+
 app.http("ingestRss", {
   methods: ["POST"],
   authLevel: "anonymous",
@@ -650,4 +685,11 @@ app.http("sendBriefingEmail", {
   authLevel: "anonymous",
   route: "ops/send-briefing-email",
   handler: sendBriefingEmailHandler,
+});
+
+app.http("getSubscriberStatus", {
+  methods: ["GET"],
+  authLevel: "anonymous",
+  route: "ops/subscriber-status",
+  handler: getSubscriberStatusHandler,
 });
