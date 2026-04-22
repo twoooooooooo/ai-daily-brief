@@ -1,5 +1,10 @@
 import { app, type InvocationContext, type Timer } from "@azure/functions";
 import { getBriefingEmailScheduleConfigs, getDailyBriefingScheduleConfigs } from "../config/schedules.js";
+import {
+  recordDailyBriefingJobCompleted,
+  recordDailyBriefingJobFailed,
+  recordDailyBriefingJobStarted,
+} from "../services/dailyBriefingJobService.js";
 import { getLatestBriefingForEdition, getBriefingByDateAndEdition } from "../services/briefingRepository.js";
 import {
   recordBriefingEmailJobCompleted,
@@ -23,6 +28,7 @@ export async function scheduledDailyBriefingHandler(
   schedule: string,
 ): Promise<void> {
   const correlationId = createCorrelationId(`scheduledDailyBriefing${edition}`);
+  const jobId = createCorrelationId(`scheduledDailyBriefingJob${edition}`);
   const scopedLogger = logger.child({
     component: "timer",
     operationName: "scheduledDailyBriefing",
@@ -37,6 +43,13 @@ export async function scheduledDailyBriefingHandler(
     schedule,
     edition,
     invocationId: context.invocationId,
+  });
+
+  recordDailyBriefingJobStarted({
+    id: jobId,
+    edition,
+    overwrite: false,
+    trigger: "scheduled",
   });
 
   try {
@@ -56,7 +69,22 @@ export async function scheduledDailyBriefingHandler(
       articleCount: briefing.issues.length + briefing.researchHighlights.length,
       invocationId: context.invocationId,
     });
+    recordDailyBriefingJobCompleted({
+      id: jobId,
+      date: briefing.date,
+      edition: briefing.edition,
+      overwrite: false,
+      briefingId: briefing.id,
+      trigger: "scheduled",
+    });
   } catch (error) {
+    recordDailyBriefingJobFailed({
+      id: jobId,
+      edition,
+      overwrite: false,
+      trigger: "scheduled",
+      error: error instanceof Error ? error.message : "Unknown scheduled briefing failure.",
+    });
     scopedLogger.exception("Scheduled daily briefing job failed.", error, {
       schedule,
       edition,

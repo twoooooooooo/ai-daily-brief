@@ -3,6 +3,7 @@ export type Importance = "High" | "Medium" | "Low";
 export type Region = "Global" | "US" | "Europe" | "Asia";
 export type ArticleType = "news" | "research";
 export type BriefingEdition = "Morning" | "Afternoon";
+export type DailyBriefingJobTrigger = "manual" | "scheduled";
 
 export interface Issue {
   id: string;
@@ -126,7 +127,23 @@ export interface BriefingOperationalStatus {
     updatedAt: string;
     date?: string;
     edition?: BriefingEdition;
+    briefingId?: string;
+    overwrite?: boolean;
+    trigger?: DailyBriefingJobTrigger;
     error?: string;
+  };
+  recentJobs?: {
+    daily: Array<{
+      id: string;
+      status: "queued" | "running" | "completed" | "failed";
+      updatedAt: string;
+      date?: string;
+      edition?: BriefingEdition;
+      briefingId?: string;
+      overwrite?: boolean;
+      trigger?: DailyBriefingJobTrigger;
+      error?: string;
+    }>;
   };
   latestSelection?: {
     updatedAt: string;

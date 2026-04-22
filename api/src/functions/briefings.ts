@@ -6,7 +6,7 @@ import type { ArticleType, BriefingEdition, Category, Importance, Region } from 
 import { getBriefingStoreStatus } from "../repositories/briefingStoreProvider.js";
 import { getSubscriberStats } from "../repositories/subscriberStore.js";
 import { getBriefingEmailSettings, getDailyBriefingScheduleSettings } from "../config/runtimeConfig.js";
-import { getLatestDailyBriefingJob } from "../services/dailyBriefingJobService.js";
+import { getLatestDailyBriefingJob, listRecentDailyBriefingJobs } from "../services/dailyBriefingJobService.js";
 import { getLatestBriefingEmailJob } from "../services/briefingEmailJobService.js";
 import { getLatestBriefingSelectionDiagnostics } from "../services/briefingSelectionDiagnosticsService.js";
 import type { Briefing, Issue } from "../shared/contracts.js";
@@ -194,7 +194,8 @@ export async function getOperationalStatusHandler(
 ): Promise<HttpResponseInit> {
   return handleRequest(context, async () => {
     const latestBriefing = await getLatestPersistedBriefing();
-    const latestJob = getLatestDailyBriefingJob();
+    const latestJob = await getLatestDailyBriefingJob();
+    const recentJobs = await listRecentDailyBriefingJobs(10);
     const latestEmailJob = getLatestBriefingEmailJob();
     const latestSelection = await getLatestBriefingSelectionDiagnostics();
     const emailSettings = getBriefingEmailSettings();
@@ -225,8 +226,24 @@ export async function getOperationalStatusHandler(
         updatedAt: latestJob.updatedAt,
         date: latestJob.date,
         edition: latestJob.edition,
+        briefingId: latestJob.briefingId,
+        overwrite: latestJob.overwrite,
+        trigger: latestJob.trigger,
         error: latestJob.error,
       } : undefined,
+      recentJobs: {
+        daily: recentJobs.map((job) => ({
+          id: job.id,
+          status: job.status,
+          updatedAt: job.updatedAt,
+          date: job.date,
+          edition: job.edition,
+          briefingId: job.briefingId,
+          overwrite: job.overwrite,
+          trigger: job.trigger,
+          error: job.error,
+        })),
+      },
       latestEmailJob: latestEmailJob ? {
         id: latestEmailJob.id,
         status: latestEmailJob.status,
