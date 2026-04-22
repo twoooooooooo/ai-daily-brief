@@ -167,7 +167,7 @@ for (const scheduleConfig of scheduleConfigs) {
   if (scheduleConfig.enabled) {
     app.timer(`scheduled${scheduleConfig.edition}Briefing`, {
       schedule: scheduleConfig.schedule,
-      useMonitor: false,
+      useMonitor: true,
       runOnStartup: false,
       retry: {
         strategy: "fixedDelay",
@@ -193,7 +193,7 @@ for (const scheduleConfig of emailScheduleConfigs) {
   if (scheduleConfig.enabled) {
     app.timer(`scheduled${scheduleConfig.edition}BriefingEmail`, {
       schedule: scheduleConfig.schedule,
-      useMonitor: false,
+      useMonitor: true,
       runOnStartup: false,
       retry: {
         strategy: "fixedDelay",
