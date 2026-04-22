@@ -26,13 +26,16 @@ interface GenerateBriefingInput {
   logContext?: LogContext;
 }
 
+type BriefingArticleCategory = NormalizedArticle["category"];
+
 const MAX_GENERATION_ARTICLES = 16;
 const MIN_GENERATION_TOTAL_SCORE = 0.5;
 const MAX_NEWS_AGE_HOURS = 48;
 const MAX_RESEARCH_AGE_HOURS = 168;
 const PRIORITY_SIGNAL_KEYWORDS = [
   "launch", "released", "release", "announced", "announcement", "introducing", "funding", "raises",
-  "acquire", "acquisition", "partnership", "policy", "regulation", "senate", "court", "ipo",
+  "acquire", "acquired", "acquisition", "buy", "buys", "buying", "option to buy", "deal", "merger", "stake",
+  "partnership", "policy", "regulation", "senate", "court", "ipo",
   "investment", "shutdown", "expands", "available", "rollout", "global", "enterprise", "subscription",
   "benchmark", "reasoning", "agent", "agents", "agentic", "developer", "api", "security",
   "chip", "gpu", "semiconductor", "inference", "training", "data center", "compute", "workload",
@@ -46,7 +49,7 @@ const TOPIC_CLUSTER_KEYWORDS: Record<string, string[]> = {
   microsoft: ["microsoft", "copilot", "azure ai"],
   infrastructure: ["data center", "gpu", "chip", "semiconductor", "memory", "power"],
   policy: ["policy", "regulation", "court", "senate", "law", "government"],
-  funding: ["funding", "raises", "investment", "ipo", "acquisition"],
+  funding: ["funding", "raises", "investment", "ipo", "acquisition", "acquire", "acquired", "buy", "option to buy", "deal", "merger", "stake"],
   voice: ["voice", "audio", "speech", "translation"],
 };
 const STORY_DUPLICATE_STOPWORDS = new Set([
@@ -65,19 +68,25 @@ const SELECTION_SLOT_DEFINITIONS = [
   },
   {
     id: "market-infrastructure",
-    matches: (article: NormalizedArticle) => article.category === "Investment" || article.category === "Infrastructure",
+    matches: (article: NormalizedArticle) => {
+      const category = getEffectiveCategory(article);
+      return category === "Investment" || category === "Infrastructure";
+    },
   },
   {
     id: "policy-regulation",
-    matches: (article: NormalizedArticle) => article.category === "Policy",
+    matches: (article: NormalizedArticle) => getEffectiveCategory(article) === "Policy",
   },
   {
     id: "product-model",
-    matches: (article: NormalizedArticle) => article.category === "Product" || article.category === "Model",
+    matches: (article: NormalizedArticle) => {
+      const category = getEffectiveCategory(article);
+      return category === "Product" || category === "Model";
+    },
   },
   {
     id: "research-open",
-    matches: (article: NormalizedArticle) => article.type === "research" || article.category === "Research",
+    matches: (article: NormalizedArticle) => article.type === "research" || getEffectiveCategory(article) === "Research",
   },
 ] as const;
 
@@ -320,6 +329,68 @@ function getSourceReason(article: NormalizedArticle): string | null {
   return null;
 }
 
+function getEffectiveCategory(article: NormalizedArticle): BriefingArticleCategory {
+  const text = normalizeText(`${article.title} ${article.summary} ${article.content ?? ""}`);
+
+  if ([
+    "acquisition",
+    "acquire",
+    "acquired",
+    "option to buy",
+    "buy",
+    "buys",
+    "buying",
+    "deal",
+    "merger",
+    "stake",
+    "funding",
+    "raises",
+    "investment",
+    "ipo",
+  ].some((keyword) => text.includes(normalizeText(keyword)))) {
+    return "Investment";
+  }
+
+  if ([
+    "policy",
+    "regulation",
+    "court",
+    "senate",
+    "law",
+    "government",
+  ].some((keyword) => text.includes(normalizeText(keyword)))) {
+    return "Policy";
+  }
+
+  if ([
+    "data center",
+    "gpu",
+    "chip",
+    "semiconductor",
+    "compute",
+    "inference",
+    "training cluster",
+    "workload",
+    "power",
+  ].some((keyword) => text.includes(normalizeText(keyword)))) {
+    return "Infrastructure";
+  }
+
+  return article.category;
+}
+
+function withEffectiveCategory(article: NormalizedArticle): NormalizedArticle {
+  const effectiveCategory = getEffectiveCategory(article);
+  if (effectiveCategory === article.category) {
+    return article;
+  }
+
+  return {
+    ...article,
+    category: effectiveCategory,
+  };
+}
+
 function getLayerPriority(article: NormalizedArticle): number {
   switch (article.layer) {
     case "official":
@@ -336,7 +407,7 @@ function getLayerPriority(article: NormalizedArticle): number {
 }
 
 function getCategoryPriority(article: NormalizedArticle): number {
-  switch (article.category) {
+  switch (getEffectiveCategory(article)) {
     case "Policy":
       return 3.3;
     case "Investment":
@@ -355,7 +426,7 @@ function getCategoryPriority(article: NormalizedArticle): number {
 }
 
 function getCategoryReason(article: NormalizedArticle): string | null {
-  switch (article.category) {
+  switch (getEffectiveCategory(article)) {
     case "Policy":
       return "정책/규제 영향도가 큰 주제";
     case "Investment":
@@ -516,7 +587,7 @@ function detectTopicCluster(article: NormalizedArticle): string {
     }
   }
 
-  return `${article.category.toLowerCase()}-${article.type}`;
+  return `${getEffectiveCategory(article).toLowerCase()}-${article.type}`;
 }
 
 function normalizeText(value: string): string {
@@ -973,7 +1044,7 @@ function selectArticlesForGeneration(
     });
   const viableScoredArticles = scoredArticles.filter((entry) => entry.totalScore >= MIN_GENERATION_TOTAL_SCORE);
   const scoredSelectionPool = viableScoredArticles.length > 0 ? viableScoredArticles : scoredArticles;
-  const rankedArticles = scoredSelectionPool.map((entry) => entry.article);
+  const rankedArticles = scoredSelectionPool.map((entry) => withEffectiveCategory(entry.article));
   const clusterRepresentatives = seedClusterRepresentatives(scoredSelectionPool);
 
   const selected: NormalizedArticle[] = [];
@@ -989,7 +1060,8 @@ function selectArticlesForGeneration(
     }
 
     const sourceCount = sourceCounts.get(article.source) ?? 0;
-    const categoryCount = categoryCounts.get(article.category) ?? 0;
+    const effectiveCategory = getEffectiveCategory(article);
+    const categoryCount = categoryCounts.get(effectiveCategory) ?? 0;
     const typeCount = typeCounts.get(article.type) ?? 0;
     const cluster = detectTopicCluster(article);
     const clusterCount = clusterCounts.get(cluster) ?? 0;
@@ -1025,7 +1097,7 @@ function selectArticlesForGeneration(
 
     selected.push(article);
     sourceCounts.set(article.source, sourceCount + 1);
-    categoryCounts.set(article.category, categoryCount + 1);
+    categoryCounts.set(effectiveCategory, categoryCount + 1);
     typeCounts.set(article.type, typeCount + 1);
     clusterCounts.set(cluster, clusterCount + 1);
     layerCounts.set(article.layer, layerCount + 1);
@@ -1042,7 +1114,7 @@ function selectArticlesForGeneration(
     );
 
     if (candidate) {
-      addArticle(candidate.article);
+      addArticle(withEffectiveCategory(candidate.article));
     }
   }
 
@@ -1057,7 +1129,7 @@ function selectArticlesForGeneration(
     );
 
     if (candidate) {
-      addArticle(candidate.article);
+      addArticle(withEffectiveCategory(candidate.article));
     }
   }
 
@@ -1068,7 +1140,7 @@ function selectArticlesForGeneration(
     if (selected.some((selectedArticle) => selectedArticle.id === representative.article.id)) {
       continue;
     }
-    addArticle(representative.article);
+    addArticle(withEffectiveCategory(representative.article));
   }
 
   for (const article of rankedArticles) {
@@ -1078,7 +1150,7 @@ function selectArticlesForGeneration(
     if (selected.some((selectedArticle) => selectedArticle.id === article.id)) {
       continue;
     }
-    addArticle(article);
+    addArticle(withEffectiveCategory(article));
   }
 
   if (selected.length < Math.min(MAX_GENERATION_ARTICLES, rankedArticles.length)) {
@@ -1088,7 +1160,7 @@ function selectArticlesForGeneration(
       }
 
       if (!selected.some((selectedArticle) => selectedArticle.id === article.id)) {
-        addArticle(article, { relaxDistribution: true });
+        addArticle(withEffectiveCategory(article), { relaxDistribution: true });
       }
     }
   }
