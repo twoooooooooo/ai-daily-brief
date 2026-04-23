@@ -3,6 +3,7 @@ import { getBriefingEmailSettings } from "../config/runtimeConfig.js";
 import { listActiveSubscribers } from "../repositories/subscriberStore.js";
 import type { Briefing } from "../shared/contracts.js";
 import { createLogger, type LogContext } from "../utils/logger.js";
+import { withRetry } from "../utils/retry.js";
 import { buildRecipientUnsubscribeLink } from "./subscriptionEmailService.js";
 
 const logger = createLogger("briefing-email");
@@ -22,6 +23,67 @@ function escapeHtml(value: string): string {
 
 function buildSubject(briefing: Briefing, subjectPrefix: string): string {
   return `${subjectPrefix} ${briefing.date} ${getEditionLabel(briefing.edition)} Edition`;
+}
+
+function extractErrorMessage(error: unknown): string | null {
+  if (!(error instanceof Error)) {
+    return null;
+  }
+
+  const ownMessage = error.message?.trim();
+  const cause = "cause" in error ? (error as Error & { cause?: unknown }).cause : undefined;
+  const causeMessage = extractErrorMessage(cause);
+  if (ownMessage && causeMessage && causeMessage !== ownMessage) {
+    return `${ownMessage}: ${causeMessage}`;
+  }
+
+  return ownMessage || causeMessage || null;
+}
+
+function buildEmailSendError(
+  address: string,
+  error: unknown,
+  poller?: { getOperationState?: () => { status?: string; result?: { error?: { code?: string; message?: string; target?: string } } } },
+): Error {
+  const state = poller?.getOperationState?.();
+  const stateError = state?.result?.error;
+  const details = [
+    state?.status && state.status !== "succeeded" ? `status=${state.status}` : null,
+    stateError?.code ? `code=${stateError.code}` : null,
+    stateError?.target ? `target=${stateError.target}` : null,
+    stateError?.message?.trim() || null,
+    extractErrorMessage(error),
+  ].filter((value): value is string => Boolean(value));
+
+  const uniqueDetails = [...new Set(details)];
+  const detailMessage = uniqueDetails.length > 0 ? `: ${uniqueDetails.join(" | ")}` : "";
+  return new Error(`Failed to send briefing email to ${address}${detailMessage}`, {
+    cause: error instanceof Error ? error : undefined,
+  });
+}
+
+function isTransientEmailError(error: unknown): boolean {
+  const message = extractErrorMessage(error)?.toLowerCase() ?? "";
+  if (!message) {
+    return false;
+  }
+
+  return [
+    "please try again after",
+    "too many requests",
+    "temporarily unavailable",
+    "timed out",
+    "timeout",
+    "etimedout",
+    "econnreset",
+    "socket hang up",
+    "rate limit",
+    "service unavailable",
+    "status=running",
+    "status=notstarted",
+  ].some((marker) => message.includes(marker))
+    || /\b429\b/.test(message)
+    || /\b5\d\d\b/.test(message);
 }
 
 function getCategoryBadgeStyles(category: Briefing["issues"][number]["category"]): {
@@ -207,7 +269,7 @@ export async function sendBriefingEmail(
   options: {
     overrideRecipients?: string[];
   } = {},
-): Promise<{ skipped: boolean; reason?: string; recipientCount?: number }> {
+): Promise<{ skipped: boolean; reason?: string; recipientCount?: number; failedRecipientCount?: number }> {
   const settings = getBriefingEmailSettings();
   const scopedLogger = logger.child(logContext);
 
@@ -224,6 +286,7 @@ export async function sendBriefingEmail(
     return { skipped: true, reason: "email-config-incomplete" };
   }
 
+  const senderAddress = settings.senderAddress;
   const subscriberAddresses = options.overrideRecipients
     ? []
     : (await listActiveSubscribers()).map((subscriber) => subscriber.email);
@@ -235,30 +298,83 @@ export async function sendBriefingEmail(
   }
 
   const client = new EmailClient(settings.connectionString);
+  const subject = buildSubject(briefing, settings.subjectPrefix);
+  let deliveredRecipientCount = 0;
+  const failedRecipients: Array<{ address: string; error: string }> = [];
+
   for (const address of recipientAddresses) {
     const unsubscribeUrl = buildRecipientUnsubscribeLink(address);
-    const poller = await client.beginSend({
-      // Azure Communication Services validates senderAddress as a plain email address.
-      senderAddress: settings.senderAddress,
-      content: {
-        subject: buildSubject(briefing, settings.subjectPrefix),
-        plainText: buildPlainTextBody(briefing, settings.siteUrl, unsubscribeUrl),
-        html: buildHtmlBody(briefing, settings.siteUrl, unsubscribeUrl),
-      },
-      recipients: {
-        to: [{ address }],
-      },
-    });
+    const plainText = buildPlainTextBody(briefing, settings.siteUrl, unsubscribeUrl);
+    const html = buildHtmlBody(briefing, settings.siteUrl, unsubscribeUrl);
 
-    await poller.pollUntilDone();
+    try {
+      await withRetry(async () => {
+        let poller:
+          | Awaited<ReturnType<EmailClient["beginSend"]>>
+          | undefined;
+
+        try {
+          poller = await client.beginSend({
+            // Azure Communication Services validates senderAddress as a plain email address.
+            senderAddress,
+            content: {
+              subject,
+              plainText,
+              html,
+            },
+            recipients: {
+              to: [{ address }],
+            },
+          }, {
+            updateIntervalInMs: 1000,
+          });
+
+          const result = await poller.pollUntilDone();
+          if (result.status.toLowerCase() !== "succeeded") {
+            throw buildEmailSendError(address, new Error(`Email send finished with status ${result.status}`), poller);
+          }
+        } catch (error) {
+          throw buildEmailSendError(address, error, poller);
+        }
+      }, {
+        retries: 2,
+        delayMs: 750,
+        backoffMultiplier: 2,
+        shouldRetry: isTransientEmailError,
+      });
+
+      deliveredRecipientCount += 1;
+    } catch (error) {
+      const message = extractErrorMessage(error) ?? `Failed to send briefing email to ${address}.`;
+      failedRecipients.push({
+        address,
+        error: message,
+      });
+      scopedLogger.warn("Failed to deliver briefing email to recipient.", {
+        briefingId: briefing.id,
+        recipient: address,
+        error: message,
+      });
+    }
   }
+
+  if (deliveredRecipientCount === 0 && failedRecipients.length > 0) {
+    throw new Error(
+      failedRecipients
+        .map((entry) => entry.error)
+        .join(" || "),
+    );
+  }
+
   scopedLogger.info("Sent briefing email notification.", {
     briefingId: briefing.id,
-    recipientCount: recipientAddresses.length,
+    recipientCount: deliveredRecipientCount,
+    failedRecipientCount: failedRecipients.length,
   });
 
   return {
     skipped: false,
-    recipientCount: recipientAddresses.length,
+    recipientCount: deliveredRecipientCount,
+    failedRecipientCount: failedRecipients.length,
   };
 }

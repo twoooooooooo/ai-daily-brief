@@ -26,13 +26,14 @@ function extractErrorMessage(error: unknown): string | null {
     return null;
   }
 
+  const ownMessage = error.message?.trim();
   const cause = "cause" in error ? (error as Error & { cause?: unknown }).cause : undefined;
   const causeMessage = extractErrorMessage(cause);
-  if (causeMessage && causeMessage !== error.message) {
-    return `${error.message}: ${causeMessage}`;
+  if (ownMessage && causeMessage && causeMessage !== ownMessage) {
+    return `${ownMessage}: ${causeMessage}`;
   }
 
-  return error.message;
+  return ownMessage || causeMessage || null;
 }
 
 function getProvidedAdminApiKey(request: HttpRequest, payload?: unknown): string | undefined {
@@ -104,7 +105,7 @@ async function handleAdminRequest(
       return internalErrorResponse(extractErrorMessage(error) ?? error.message);
     }
 
-    return internalErrorResponse("Failed to execute admin operation.");
+    return internalErrorResponse(extractErrorMessage(error) ?? "Failed to execute admin operation.");
   }
 }
 
@@ -568,6 +569,7 @@ export async function sendBriefingEmailHandler(
         reason: result.reason,
         briefingId: briefing.id,
         recipientCount: result.recipientCount ?? 0,
+        failedRecipientCount: result.failedRecipientCount ?? 0,
         testRecipient: testRecipient ?? null,
       });
     } catch (error) {
