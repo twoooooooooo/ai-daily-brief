@@ -1,6 +1,7 @@
 import { EmailClient } from "@azure/communication-email";
 import { getBriefingEmailSettings } from "../config/runtimeConfig.js";
 import { createSubscriptionToken } from "../utils/subscriptionToken.js";
+import { withRetry } from "../utils/retry.js";
 
 function escapeHtml(value: string): string {
   return value
@@ -23,6 +24,67 @@ function buildConfirmationLink(siteUrl: string, email: string): string {
 function buildUnsubscribeLink(siteUrl: string, email: string): string {
   const token = createSubscriptionToken(email, "confirm-unsubscribe");
   return buildApiUrl(siteUrl, `/api/subscriptions/briefings/unsubscribe/confirm?token=${encodeURIComponent(token)}`);
+}
+
+function extractErrorMessage(error: unknown): string | null {
+  if (!(error instanceof Error)) {
+    return null;
+  }
+
+  const ownMessage = error.message?.trim();
+  const cause = "cause" in error ? (error as Error & { cause?: unknown }).cause : undefined;
+  const causeMessage = extractErrorMessage(cause);
+  if (ownMessage && causeMessage && causeMessage !== ownMessage) {
+    return `${ownMessage}: ${causeMessage}`;
+  }
+
+  return ownMessage || causeMessage || null;
+}
+
+function buildSubscriptionEmailError(
+  recipient: string,
+  error: unknown,
+  poller?: { getOperationState?: () => { status?: string; result?: { error?: { code?: string; message?: string; target?: string } } } },
+): Error {
+  const state = poller?.getOperationState?.();
+  const stateError = state?.result?.error;
+  const details = [
+    state?.status && state.status !== "succeeded" ? `status=${state.status}` : null,
+    stateError?.code ? `code=${stateError.code}` : null,
+    stateError?.target ? `target=${stateError.target}` : null,
+    stateError?.message?.trim() || null,
+    extractErrorMessage(error),
+  ].filter((value): value is string => Boolean(value));
+
+  const uniqueDetails = [...new Set(details)];
+  const detailMessage = uniqueDetails.length > 0 ? `: ${uniqueDetails.join(" | ")}` : "";
+  return new Error(`Failed to send subscription email to ${recipient}${detailMessage}`, {
+    cause: error instanceof Error ? error : undefined,
+  });
+}
+
+function isTransientSubscriptionEmailError(error: unknown): boolean {
+  const message = extractErrorMessage(error)?.toLowerCase() ?? "";
+  if (!message) {
+    return false;
+  }
+
+  return [
+    "please try again after",
+    "too many requests",
+    "temporarily unavailable",
+    "timed out",
+    "timeout",
+    "etimedout",
+    "econnreset",
+    "socket hang up",
+    "rate limit",
+    "service unavailable",
+    "status=running",
+    "status=notstarted",
+  ].some((marker) => message.includes(marker))
+    || /\b429\b/.test(message)
+    || /\b5\d\d\b/.test(message);
 }
 
 function buildSubscriptionEmailHtml(confirmUrl: string, siteUrl: string): string {
@@ -75,20 +137,43 @@ async function sendSingleEmail(to: string, subject: string, html: string, plainT
     throw new Error("Briefing email settings are incomplete.");
   }
 
+  const senderAddress = settings.senderAddress;
   const client = new EmailClient(settings.connectionString);
-  const poller = await client.beginSend({
-    senderAddress: settings.senderAddress,
-    content: {
-      subject,
-      html,
-      plainText,
-    },
-    recipients: {
-      to: [{ address: to }],
-    },
-  });
+  await withRetry(async () => {
+    let poller:
+      | Awaited<ReturnType<EmailClient["beginSend"]>>
+      | undefined;
 
-  await poller.pollUntilDone();
+    try {
+      poller = await client.beginSend({
+        senderAddress,
+        content: {
+          subject,
+          html,
+          plainText,
+        },
+        recipients: {
+          to: [{ address: to }],
+        },
+      });
+
+      const result = await poller.pollUntilDone();
+      if (result.status.toLowerCase() !== "succeeded") {
+        throw buildSubscriptionEmailError(
+          to,
+          new Error(`Email send finished with status ${result.status}`),
+          poller,
+        );
+      }
+    } catch (error) {
+      throw buildSubscriptionEmailError(to, error, poller);
+    }
+  }, {
+    retries: 3,
+    delayMs: 1000,
+    backoffMultiplier: 2,
+    shouldRetry: isTransientSubscriptionEmailError,
+  });
 }
 
 export async function sendSubscriptionConfirmationEmail(email: string): Promise<void> {
