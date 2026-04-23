@@ -662,6 +662,11 @@ export async function getSubscriberStatusHandler(
             createdAt: subscriber.createdAt,
             updatedAt: subscriber.updatedAt,
             source: subscriber.source,
+            confirmationEmailAttemptCount: subscriber.confirmationEmailAttemptCount ?? 0,
+            confirmationEmailLastAttemptAt: subscriber.confirmationEmailLastAttemptAt ?? null,
+            confirmationEmailLastSentAt: subscriber.confirmationEmailLastSentAt ?? null,
+            confirmationEmailNextRetryAt: subscriber.confirmationEmailNextRetryAt ?? null,
+            confirmationEmailLastError: subscriber.confirmationEmailLastError ?? null,
           }
         : null,
     });
@@ -719,7 +724,7 @@ export async function processPendingConfirmationsHandler(
       sentCount,
       failedCount,
       results,
-    });
+    }, failedCount > 0 ? 500 : 200);
   });
 }
 
