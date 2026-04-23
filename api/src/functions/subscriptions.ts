@@ -1,7 +1,7 @@
 import { app, type HttpRequest, type HttpResponseInit, type InvocationContext } from "@azure/functions";
 import { getBriefingEmailSettings } from "../config/runtimeConfig.js";
 import { badRequestResponse, internalErrorResponse, jsonResponse } from "../http/responses.js";
-import { upsertSubscriber, type SubscriberUpsertAction } from "../repositories/subscriberStore.js";
+import { recordSubscriberConfirmationEmailAttempt, upsertSubscriber, type SubscriberUpsertAction } from "../repositories/subscriberStore.js";
 import { sendSubscriptionConfirmationEmail } from "../services/subscriptionEmailService.js";
 import { verifySubscriptionToken } from "../utils/subscriptionToken.js";
 
@@ -116,9 +116,15 @@ async function getSubscriptionRequestMessage(
 
   try {
     await sendSubscriptionConfirmationEmail(email);
+    await recordSubscriberConfirmationEmailAttempt(email, { sent: true });
   } catch (error) {
     context.error("Failed to send subscription confirmation email", error);
-    return "등록 요청은 저장됐지만 확인 메일 발송에 실패했습니다. 잠시 후 다시 구독하기를 눌러 확인 메일을 다시 받아주세요.";
+    const message = error instanceof Error ? error.message : "Confirmation email delivery failed.";
+    await recordSubscriberConfirmationEmailAttempt(email, {
+      sent: false,
+      error: message,
+    });
+    return "등록 요청은 저장됐습니다. 시스템이 확인 메일 발송을 자동으로 다시 시도합니다. 메일이 도착하면 링크를 눌러 구독을 완료해 주세요.";
   }
 
   switch (action) {

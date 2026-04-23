@@ -81,6 +81,8 @@ export interface BriefingOperationalStatus {
     pending: number;
     total: number;
     provider: "blob" | "file";
+    pendingConfirmationEmailCount?: number;
+    pendingConfirmationRetryDueCount?: number;
   };
   schedule: {
     enabled: boolean;

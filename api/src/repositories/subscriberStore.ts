@@ -9,6 +9,11 @@ export interface SubscriberRecord {
   createdAt: string;
   updatedAt: string;
   source: "website";
+  confirmationEmailAttemptCount?: number;
+  confirmationEmailLastAttemptAt?: string;
+  confirmationEmailLastSentAt?: string;
+  confirmationEmailNextRetryAt?: string;
+  confirmationEmailLastError?: string;
 }
 
 export type SubscriberUpsertAction =
@@ -35,6 +40,7 @@ const storageSettings = getSubscriberStorageSettings();
 const environment = getEnvironmentSettings();
 const DEFAULT_STORAGE_FILE = path.join(process.cwd(), ".data", "subscribers.json");
 const storageFilePath = storageSettings.filePath || DEFAULT_STORAGE_FILE;
+const CONFIRMATION_EMAIL_RETRY_DELAYS_MINUTES = [5, 15, 30, 60, 120, 240];
 
 function createEmptyStore(): PersistedSubscriberFile {
   return { subscribers: [] };
@@ -42,6 +48,31 @@ function createEmptyStore(): PersistedSubscriberFile {
 
 function cloneRecord(record: SubscriberRecord): SubscriberRecord {
   return { ...record };
+}
+
+function resetConfirmationEmailState(record: SubscriberRecord): void {
+  record.confirmationEmailAttemptCount = undefined;
+  record.confirmationEmailLastAttemptAt = undefined;
+  record.confirmationEmailLastSentAt = undefined;
+  record.confirmationEmailNextRetryAt = undefined;
+  record.confirmationEmailLastError = undefined;
+}
+
+function initializePendingConfirmationState(record: SubscriberRecord, nowIso: string): void {
+  record.confirmationEmailAttemptCount = 0;
+  record.confirmationEmailLastAttemptAt = undefined;
+  record.confirmationEmailLastSentAt = undefined;
+  record.confirmationEmailNextRetryAt = nowIso;
+  record.confirmationEmailLastError = undefined;
+}
+
+function buildNextConfirmationRetryAt(attemptCount: number, nowIso: string): string {
+  const delayMinutes = CONFIRMATION_EMAIL_RETRY_DELAYS_MINUTES[
+    Math.min(Math.max(attemptCount - 1, 0), CONFIRMATION_EMAIL_RETRY_DELAYS_MINUTES.length - 1)
+  ] ?? CONFIRMATION_EMAIL_RETRY_DELAYS_MINUTES[CONFIRMATION_EMAIL_RETRY_DELAYS_MINUTES.length - 1];
+  const nextRetry = new Date(nowIso);
+  nextRetry.setMinutes(nextRetry.getMinutes() + delayMinutes);
+  return nextRetry.toISOString();
 }
 
 function shouldUseBlobStorage(): boolean {
@@ -132,6 +163,9 @@ export async function upsertSubscriber(
   if (existing) {
     if (existing.status === status) {
       if (status === "pending") {
+        existing.updatedAt = now;
+        existing.confirmationEmailNextRetryAt = now;
+        await saveStore(store);
         return {
           action: "already-pending",
           subscriber: cloneRecord(existing),
@@ -146,6 +180,11 @@ export async function upsertSubscriber(
 
     existing.status = status;
     existing.updatedAt = now;
+    if (status === "pending") {
+      initializePendingConfirmationState(existing, now);
+    } else {
+      resetConfirmationEmailState(existing);
+    }
     await saveStore(store);
     return {
       action: status === "pending"
@@ -171,6 +210,9 @@ export async function upsertSubscriber(
     updatedAt: now,
     source: "website",
   };
+  if (status === "pending") {
+    initializePendingConfirmationState(nextRecord, now);
+  }
   store.subscribers.push(nextRecord);
   await saveStore(store);
   return {
@@ -194,15 +236,98 @@ export async function getSubscriberByEmail(email: string): Promise<SubscriberRec
   return subscriber ? cloneRecord(subscriber) : null;
 }
 
-export async function getSubscriberStats(): Promise<{ active: number; pending: number; total: number; provider: "blob" | "file" }> {
+export async function recordSubscriberConfirmationEmailAttempt(
+  email: string,
+  input: { sent: boolean; error?: string },
+): Promise<SubscriberRecord | null> {
+  const store = await loadStore();
+  const normalizedEmail = email.trim().toLowerCase();
+  const subscriber = store.subscribers.find((item) => item.email === normalizedEmail);
+  if (!subscriber || subscriber.status !== "pending") {
+    return subscriber ? cloneRecord(subscriber) : null;
+  }
+
+  const now = new Date().toISOString();
+  const nextAttemptCount = (subscriber.confirmationEmailAttemptCount ?? 0) + 1;
+  subscriber.updatedAt = now;
+  subscriber.confirmationEmailAttemptCount = nextAttemptCount;
+  subscriber.confirmationEmailLastAttemptAt = now;
+
+  if (input.sent) {
+    subscriber.confirmationEmailLastSentAt = now;
+    subscriber.confirmationEmailNextRetryAt = undefined;
+    subscriber.confirmationEmailLastError = undefined;
+  } else {
+    subscriber.confirmationEmailLastSentAt = undefined;
+    subscriber.confirmationEmailNextRetryAt = buildNextConfirmationRetryAt(nextAttemptCount, now);
+    subscriber.confirmationEmailLastError = input.error?.trim() || "Confirmation email delivery failed.";
+  }
+
+  await saveStore(store);
+  return cloneRecord(subscriber);
+}
+
+export async function listDuePendingConfirmationSubscribers(limit = 25): Promise<SubscriberRecord[]> {
+  const store = await loadStore();
+  const now = Date.now();
+
+  return store.subscribers
+    .filter((subscriber) => {
+      if (subscriber.status !== "pending") {
+        return false;
+      }
+
+      if (subscriber.confirmationEmailLastSentAt) {
+        return false;
+      }
+
+      const nextRetryAt = subscriber.confirmationEmailNextRetryAt ?? subscriber.updatedAt;
+      const parsed = new Date(nextRetryAt);
+      if (Number.isNaN(parsed.getTime())) {
+        return true;
+      }
+
+      return parsed.getTime() <= now;
+    })
+    .sort((left, right) => {
+      const leftKey = left.confirmationEmailNextRetryAt ?? left.updatedAt;
+      const rightKey = right.confirmationEmailNextRetryAt ?? right.updatedAt;
+      return leftKey.localeCompare(rightKey);
+    })
+    .slice(0, Math.max(1, limit))
+    .map(cloneRecord);
+}
+
+export async function getSubscriberStats(): Promise<{
+  active: number;
+  pending: number;
+  total: number;
+  provider: "blob" | "file";
+  pendingConfirmationEmailCount: number;
+  pendingConfirmationRetryDueCount: number;
+}> {
   const store = await loadStore();
   const active = store.subscribers.filter((subscriber) => subscriber.status === "active").length;
   const pending = store.subscribers.filter((subscriber) => subscriber.status === "pending").length;
+  const now = Date.now();
+  const pendingSubscribers = store.subscribers.filter((subscriber) => subscriber.status === "pending");
+  const pendingConfirmationEmailCount = pendingSubscribers.filter((subscriber) => !subscriber.confirmationEmailLastSentAt).length;
+  const pendingConfirmationRetryDueCount = pendingSubscribers.filter((subscriber) => {
+    if (subscriber.confirmationEmailLastSentAt) {
+      return false;
+    }
+
+    const nextRetryAt = subscriber.confirmationEmailNextRetryAt ?? subscriber.updatedAt;
+    const parsed = new Date(nextRetryAt);
+    return Number.isNaN(parsed.getTime()) || parsed.getTime() <= now;
+  }).length;
   return {
     active,
     pending,
     total: store.subscribers.length,
     provider: shouldUseBlobStorage() ? "blob" : "file",
+    pendingConfirmationEmailCount,
+    pendingConfirmationRetryDueCount,
   };
 }
 

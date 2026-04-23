@@ -15,7 +15,12 @@ import { DailyBriefingPipelineError, runDailyBriefingPipeline } from "../service
 import { getBriefingByDateAndEdition, getLatestBriefingForEdition, saveBriefingWithOptions } from "../services/briefingRepository.js";
 import { sendBriefingEmail } from "../services/briefingEmailService.js";
 import { ingestConfiguredRssFeeds } from "../services/rssIngestionService.js";
-import { getSubscriberByEmail } from "../repositories/subscriberStore.js";
+import {
+  getSubscriberByEmail,
+  listDuePendingConfirmationSubscribers,
+  recordSubscriberConfirmationEmailAttempt,
+} from "../repositories/subscriberStore.js";
+import { sendSubscriptionConfirmationEmail } from "../services/subscriptionEmailService.js";
 import type { BriefingEdition } from "../shared/contracts.js";
 import type { NormalizedArticle } from "../shared/rss.js";
 import { createCorrelationId, createLogger } from "../utils/logger.js";
@@ -663,6 +668,61 @@ export async function getSubscriberStatusHandler(
   });
 }
 
+export async function processPendingConfirmationsHandler(
+  request: HttpRequest,
+  context: InvocationContext,
+): Promise<HttpResponseInit> {
+  return handleAdminRequest(context, "processPendingConfirmations", async (logContext) => {
+    const adminKey = request.query.get("adminKey");
+    const payload = adminKey ? { adminApiKey: adminKey } : {};
+
+    if (!isAuthorizedAdminRequest(request, payload)) {
+      logger.child(logContext).warn("Rejected unauthorized admin request.");
+      return unauthorizedResponse("Unauthorized admin operation.");
+    }
+
+    const parsedLimit = Number.parseInt(request.query.get("limit")?.trim() ?? "20", 10);
+    const limit = Number.isFinite(parsedLimit) && parsedLimit > 0 ? Math.min(parsedLimit, 100) : 20;
+    const dueSubscribers = await listDuePendingConfirmationSubscribers(limit);
+
+    let sentCount = 0;
+    let failedCount = 0;
+    const results: Array<{ email: string; status: "sent" | "failed"; error?: string }> = [];
+
+    for (const subscriber of dueSubscribers) {
+      try {
+        await sendSubscriptionConfirmationEmail(subscriber.email);
+        await recordSubscriberConfirmationEmailAttempt(subscriber.email, { sent: true });
+        sentCount += 1;
+        results.push({
+          email: subscriber.email,
+          status: "sent",
+        });
+      } catch (error) {
+        const message = extractErrorMessage(error) ?? "Failed to send confirmation email.";
+        await recordSubscriberConfirmationEmailAttempt(subscriber.email, {
+          sent: false,
+          error: message,
+        });
+        failedCount += 1;
+        results.push({
+          email: subscriber.email,
+          status: "failed",
+          error: message,
+        });
+      }
+    }
+
+    return jsonResponse({
+      ok: true,
+      processedCount: dueSubscribers.length,
+      sentCount,
+      failedCount,
+      results,
+    });
+  });
+}
+
 app.http("ingestRss", {
   methods: ["POST"],
   authLevel: "anonymous",
@@ -738,4 +798,11 @@ app.http("getSubscriberStatus", {
   authLevel: "anonymous",
   route: "ops/subscriber-status",
   handler: getSubscriberStatusHandler,
+});
+
+app.http("processPendingConfirmations", {
+  methods: ["GET", "POST"],
+  authLevel: "anonymous",
+  route: "ops/process-pending-confirmations",
+  handler: processPendingConfirmationsHandler,
 });
