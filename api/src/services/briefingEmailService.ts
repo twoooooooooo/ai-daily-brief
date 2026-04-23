@@ -7,7 +7,9 @@ import { withRetry } from "../utils/retry.js";
 import { buildRecipientUnsubscribeLink } from "./subscriptionEmailService.js";
 
 const logger = createLogger("briefing-email");
-const RECIPIENT_BATCH_SIZE = 25;
+// Azure Communication Services allows up to 50 recipients per email.
+// We use the sender as the visible "to" recipient, so keep BCC batches at 49 max.
+const RECIPIENT_BATCH_SIZE = 49;
 
 function getEditionLabel(edition: Briefing["edition"]): string {
   return edition === "Morning" ? "Morning" : "Afternoon";
