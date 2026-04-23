@@ -7,6 +7,7 @@ import { withRetry } from "../utils/retry.js";
 import { buildRecipientUnsubscribeLink } from "./subscriptionEmailService.js";
 
 const logger = createLogger("briefing-email");
+const RECIPIENT_BATCH_SIZE = 25;
 
 function getEditionLabel(edition: Briefing["edition"]): string {
   return edition === "Morning" ? "Morning" : "Afternoon";
@@ -146,6 +147,19 @@ function buildBriefingLink(siteUrl: string, briefing: Briefing): string {
   return `${baseUrl}/archive/${encodeURIComponent(briefing.id)}`;
 }
 
+function chunkRecipients<T>(items: T[], chunkSize: number): T[][] {
+  if (chunkSize <= 0) {
+    return [items];
+  }
+
+  const chunks: T[][] = [];
+  for (let index = 0; index < items.length; index += chunkSize) {
+    chunks.push(items.slice(index, index + chunkSize));
+  }
+
+  return chunks;
+}
+
 function buildPlainTextBody(briefing: Briefing, siteUrl: string, unsubscribeUrl: string): string {
   const articles = [...briefing.issues, ...briefing.researchHighlights];
   const briefingLink = buildBriefingLink(siteUrl, briefing);
@@ -255,7 +269,7 @@ function buildHtmlBody(briefing: Briefing, siteUrl: string, unsubscribeUrl: stri
         <div style="padding:18px 32px 28px;background:#FFFFFF;">
           <div style="font-size:12px;color:#64748B;line-height:1.7;">
             You're receiving this because you subscribed to Global AI Daily Brief updates.
-            <a href="${escapeHtml(unsubscribeUrl)}" style="color:#1D4ED8;text-decoration:none;margin-left:6px;">Unsubscribe</a>
+            <a href="${escapeHtml(unsubscribeUrl)}" style="color:#1D4ED8;text-decoration:none;margin-left:6px;">Manage subscription</a>
           </div>
         </div>
       </div>
@@ -309,6 +323,9 @@ export async function sendBriefingEmail(
   let deliveredRecipientCount = 0;
   let attemptedRecipientCount = 0;
   const failedRecipients: Array<{ address: string; error: string }> = [];
+  const recipientBatches = options.overrideRecipients
+    ? recipientAddresses.map((address) => [address])
+    : chunkRecipients(recipientAddresses, RECIPIENT_BATCH_SIZE);
 
   options.onProgress?.({
     totalRecipientCount,
@@ -317,8 +334,12 @@ export async function sendBriefingEmail(
     failedRecipientCount: failedRecipients.length,
   });
 
-  for (const address of recipientAddresses) {
-    const unsubscribeUrl = buildRecipientUnsubscribeLink(address);
+  for (const batch of recipientBatches) {
+    const primaryAddress = batch[0];
+    const bccAddresses = batch.slice(1);
+    const unsubscribeUrl = batch.length === 1
+      ? buildRecipientUnsubscribeLink(primaryAddress)
+      : settings.siteUrl;
     const plainText = buildPlainTextBody(briefing, settings.siteUrl, unsubscribeUrl);
     const html = buildHtmlBody(briefing, settings.siteUrl, unsubscribeUrl);
 
@@ -338,7 +359,12 @@ export async function sendBriefingEmail(
               html,
             },
             recipients: {
-              to: [{ address }],
+              to: [{ address: primaryAddress }],
+              ...(bccAddresses.length > 0
+                ? {
+                    bcc: bccAddresses.map((address) => ({ address })),
+                  }
+                : {}),
             },
           }, {
             updateIntervalInMs: 1000,
@@ -346,10 +372,18 @@ export async function sendBriefingEmail(
 
           const result = await poller.pollUntilDone();
           if (result.status.toLowerCase() !== "succeeded") {
-            throw buildEmailSendError(address, new Error(`Email send finished with status ${result.status}`), poller);
+            throw buildEmailSendError(
+              `${primaryAddress}${bccAddresses.length > 0 ? ` (+${bccAddresses.length} bcc)` : ""}`,
+              new Error(`Email send finished with status ${result.status}`),
+              poller,
+            );
           }
         } catch (error) {
-          throw buildEmailSendError(address, error, poller);
+          throw buildEmailSendError(
+            `${primaryAddress}${bccAddresses.length > 0 ? ` (+${bccAddresses.length} bcc)` : ""}`,
+            error,
+            poller,
+          );
         }
       }, {
         retries: 2,
@@ -358,20 +392,23 @@ export async function sendBriefingEmail(
         shouldRetry: isTransientEmailError,
       });
 
-      deliveredRecipientCount += 1;
+      deliveredRecipientCount += batch.length;
     } catch (error) {
-      const message = extractErrorMessage(error) ?? `Failed to send briefing email to ${address}.`;
-      failedRecipients.push({
-        address,
-        error: message,
-      });
+      const message = extractErrorMessage(error) ?? `Failed to send briefing email to batch beginning with ${primaryAddress}.`;
+      failedRecipients.push(
+        ...batch.map((address) => ({
+          address,
+          error: message,
+        })),
+      );
       scopedLogger.warn("Failed to deliver briefing email to recipient.", {
         briefingId: briefing.id,
-        recipient: address,
+        primaryRecipient: primaryAddress,
+        batchRecipientCount: batch.length,
         error: message,
       });
     } finally {
-      attemptedRecipientCount += 1;
+      attemptedRecipientCount += batch.length;
       options.onProgress?.({
         totalRecipientCount,
         attemptedRecipientCount,
