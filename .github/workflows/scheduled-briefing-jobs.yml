@@ -1,11 +1,6 @@
 name: Scheduled Briefing Jobs
 
 on:
-  schedule:
-    - cron: "0 21 * * *" # 06:00 KST Morning briefing generation
-    - cron: "0 23 * * *" # 08:00 KST Morning email delivery
-    - cron: "0 3 * * *"  # 12:00 KST Afternoon briefing generation
-    - cron: "50 3 * * *" # 12:50 KST Afternoon email delivery
   workflow_dispatch:
     inputs:
       task:
@@ -19,7 +14,7 @@ on:
           - email-afternoon
 
 concurrency:
-  group: scheduled-briefing-jobs-${{ github.event.schedule || inputs.task || github.run_id }}
+  group: scheduled-briefing-jobs-${{ inputs.task || github.run_id }}
   cancel-in-progress: false
 
 jobs:
@@ -31,20 +26,7 @@ jobs:
         id: resolve
         shell: bash
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            task="${{ inputs.task }}"
-          else
-            case "${{ github.event.schedule }}" in
-              "0 21 * * *") task="generate-morning" ;;
-              "0 23 * * *") task="email-morning" ;;
-              "0 3 * * *") task="generate-afternoon" ;;
-              "50 3 * * *") task="email-afternoon" ;;
-              *)
-                echo "Unknown schedule: ${{ github.event.schedule }}"
-                exit 1
-                ;;
-            esac
-          fi
+          task="${{ inputs.task }}"
 
           echo "task=${task}" >> "$GITHUB_OUTPUT"
           echo "Resolved task: ${task}"

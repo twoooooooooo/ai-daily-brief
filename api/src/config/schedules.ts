@@ -31,7 +31,7 @@ export function getBriefingEmailScheduleConfigs(): BriefingEmailScheduleConfig[]
   return emailSettings.runs.map((run) => ({
     edition: run.edition,
     schedule: run.cron,
-    enabled: emailSettings.enabled,
+    enabled: briefingSettings.enabled && emailSettings.enabled,
     timezone: briefingSettings.timezone,
   }));
 }

@@ -15,6 +15,7 @@
     "MORNING_BRIEFING_SCHEDULE": "0 0 6 * * *",
     "AFTERNOON_BRIEFING_SCHEDULE": "0 0 14 * * *",
     "ENABLE_SCHEDULED_BRIEFING": "false",
+    "ENABLE_INTERNAL_TIMER_SCHEDULE": "false",
     "BRIEFING_STORAGE_PROVIDER": "file",
     "BRIEFING_STORAGE_FILE": ".data/briefings.json",
     "BRIEFING_STORAGE_CONTAINER": "briefings",

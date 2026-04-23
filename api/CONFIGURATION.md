@@ -23,6 +23,7 @@ Operational values:
 - `FUNCTIONS_WORKER_RUNTIME`
 - `DAILY_BRIEFING_SCHEDULE`
 - `ENABLE_SCHEDULED_BRIEFING`
+- `ENABLE_INTERNAL_TIMER_SCHEDULE`
 - `BRIEFING_STORAGE_FILE`
 
 `local.settings.json` should stay local only and must not be committed.
@@ -37,6 +38,7 @@ Set these as Function App Application Settings in Azure:
 - `OPENAI_USE_AZURE_API_KEY_AUTH`
 - `DAILY_BRIEFING_SCHEDULE`
 - `ENABLE_SCHEDULED_BRIEFING`
+- `ENABLE_INTERNAL_TIMER_SCHEDULE`
 
 Optional:
 
@@ -80,3 +82,12 @@ Recommended Key Vault-managed settings:
 - Any future API keys, signing keys, or storage credentials
 
 Non-secret values such as `OPENAI_MODEL` or `DAILY_BRIEFING_SCHEDULE` can remain normal app settings unless you prefer to centralize them too.
+
+## External schedulers
+
+If you use Azure Logic Apps or another external scheduler to call the admin HTTP endpoints, leave:
+
+- `ENABLE_SCHEDULED_BRIEFING=true`
+- `ENABLE_INTERNAL_TIMER_SCHEDULE=false`
+
+That keeps scheduling metadata available in `/api/status` while preventing the built-in timer-triggered jobs from executing inside the SWA-managed Functions runtime.

@@ -75,6 +75,11 @@ function readEnv(name: string): string | undefined {
   return value ? value : undefined;
 }
 
+function isInternalTimerSchedulerEnabled(): boolean {
+  return readEnv("ENABLE_SCHEDULED_BRIEFING") === "true"
+    && readEnv("ENABLE_INTERNAL_TIMER_SCHEDULE") === "true";
+}
+
 export function getRequiredSecret(name: string): string {
   const value = readEnv(name);
   if (!value) {
@@ -122,7 +127,7 @@ export function getDailyBriefingScheduleSettings(): ScheduleSettings {
     ?? DEFAULT_AFTERNOON_BRIEFING_SCHEDULE;
 
   return {
-    enabled: readEnv("ENABLE_SCHEDULED_BRIEFING") === "true",
+    enabled: isInternalTimerSchedulerEnabled(),
     timezone: readEnv("BRIEFING_TIMEZONE") ?? "Asia/Seoul",
     runs: [
       { edition: "Morning", cron: morningSchedule },

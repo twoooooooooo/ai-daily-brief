@@ -63,6 +63,7 @@ For the Functions app, configure these in Azure:
 - `REQUIRE_ADMIN_API_AUTH`
 - `DAILY_BRIEFING_SCHEDULE`
 - `ENABLE_SCHEDULED_BRIEFING`
+- `ENABLE_INTERNAL_TIMER_SCHEDULE`
 - `BRIEFING_STORAGE_PROVIDER`
 - `BRIEFING_STORAGE_CONNECTION_STRING`
 - `BRIEFING_STORAGE_CONTAINER`
@@ -82,6 +83,13 @@ For the Functions app, configure these in Azure:
 - `AFTERNOON_EMAIL_SCHEDULE`
 - `BRIEFING_STORAGE_FILE` only if you intentionally want a custom filesystem path
 - Future database secrets should also be stored as app settings or Key Vault references, not in source code
+
+When using an external scheduler such as Azure Logic Apps, keep:
+
+- `ENABLE_SCHEDULED_BRIEFING=true`
+- `ENABLE_INTERNAL_TIMER_SCHEDULE=false`
+
+This keeps scheduling metadata visible in `/api/status` while preventing the built-in SWA-managed timer handlers from running.
 
 ### Secrets management
 
