@@ -268,6 +268,12 @@ export async function sendBriefingEmail(
   logContext: LogContext = {},
   options: {
     overrideRecipients?: string[];
+    onProgress?: (progress: {
+      totalRecipientCount: number;
+      attemptedRecipientCount: number;
+      deliveredRecipientCount: number;
+      failedRecipientCount: number;
+    }) => void;
   } = {},
 ): Promise<{ skipped: boolean; reason?: string; recipientCount?: number; failedRecipientCount?: number }> {
   const settings = getBriefingEmailSettings();
@@ -299,8 +305,17 @@ export async function sendBriefingEmail(
 
   const client = new EmailClient(settings.connectionString);
   const subject = buildSubject(briefing, settings.subjectPrefix);
+  const totalRecipientCount = recipientAddresses.length;
   let deliveredRecipientCount = 0;
+  let attemptedRecipientCount = 0;
   const failedRecipients: Array<{ address: string; error: string }> = [];
+
+  options.onProgress?.({
+    totalRecipientCount,
+    attemptedRecipientCount,
+    deliveredRecipientCount,
+    failedRecipientCount: failedRecipients.length,
+  });
 
   for (const address of recipientAddresses) {
     const unsubscribeUrl = buildRecipientUnsubscribeLink(address);
@@ -354,6 +369,14 @@ export async function sendBriefingEmail(
         briefingId: briefing.id,
         recipient: address,
         error: message,
+      });
+    } finally {
+      attemptedRecipientCount += 1;
+      options.onProgress?.({
+        totalRecipientCount,
+        attemptedRecipientCount,
+        deliveredRecipientCount,
+        failedRecipientCount: failedRecipients.length,
       });
     }
   }

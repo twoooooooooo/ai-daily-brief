@@ -3,8 +3,10 @@ import { badRequestResponse, internalErrorResponse, jsonResponse, notFoundRespon
 import { getAdminApiSettings, getAdminProbeSettings } from "../config/runtimeConfig.js";
 import { BriefingGenerationError, generateDailyBriefing, probeOpenAIConnection } from "../services/briefingGenerationService.js";
 import {
+  findRecentBriefingEmailJobForBriefing,
   recordBriefingEmailJobCompleted,
   recordBriefingEmailJobFailed,
+  recordBriefingEmailJobProgress,
   recordBriefingEmailJobSkipped,
   recordBriefingEmailJobStarted,
 } from "../services/briefingEmailJobService.js";
@@ -534,6 +536,32 @@ export async function sendBriefingEmailHandler(
       return notFoundResponse("No persisted briefing was available for email delivery.");
     }
 
+    if (!testRecipient) {
+      const existingJob = await findRecentBriefingEmailJobForBriefing(briefing.id);
+      if (existingJob) {
+        recordBriefingEmailJobSkipped({
+          id: emailJobId,
+          date: briefing.date,
+          edition: briefing.edition,
+          briefingId: briefing.id,
+          totalRecipientCount: existingJob.totalRecipientCount,
+          attemptedRecipientCount: existingJob.attemptedRecipientCount,
+          recipientCount: existingJob.recipientCount,
+          failedRecipientCount: existingJob.failedRecipientCount,
+          reason: existingJob.status === "running" ? "duplicate-running-job" : "duplicate-completed-job",
+        });
+        return jsonResponse({
+          ok: true,
+          skipped: true,
+          reason: existingJob.status === "running" ? "duplicate-running-job" : "duplicate-completed-job",
+          briefingId: briefing.id,
+          recipientCount: existingJob.recipientCount ?? 0,
+          failedRecipientCount: existingJob.failedRecipientCount ?? 0,
+          testRecipient: null,
+        });
+      }
+    }
+
     try {
       recordBriefingEmailJobStarted({
         id: emailJobId,
@@ -544,6 +572,18 @@ export async function sendBriefingEmailHandler(
 
       const result = await sendBriefingEmail(briefing, logContext, {
         overrideRecipients: testRecipient ? [testRecipient] : undefined,
+        onProgress: (progress) => {
+          recordBriefingEmailJobProgress({
+            id: emailJobId,
+            date: briefing.date,
+            edition: briefing.edition,
+            briefingId: briefing.id,
+            totalRecipientCount: progress.totalRecipientCount,
+            attemptedRecipientCount: progress.attemptedRecipientCount,
+            recipientCount: progress.deliveredRecipientCount,
+            failedRecipientCount: progress.failedRecipientCount,
+          });
+        },
       });
       if (result.skipped) {
         recordBriefingEmailJobSkipped({
@@ -559,7 +599,10 @@ export async function sendBriefingEmailHandler(
           date: briefing.date,
           edition: briefing.edition,
           briefingId: briefing.id,
+          totalRecipientCount: testRecipient ? 1 : undefined,
+          attemptedRecipientCount: (result.recipientCount ?? 0) + (result.failedRecipientCount ?? 0),
           recipientCount: result.recipientCount,
+          failedRecipientCount: result.failedRecipientCount,
         });
       }
 
@@ -578,6 +621,7 @@ export async function sendBriefingEmailHandler(
         date: briefing.date,
         edition: briefing.edition,
         briefingId: briefing.id,
+        totalRecipientCount: testRecipient ? 1 : undefined,
         error: extractErrorMessage(error) ?? "Unknown email delivery failure.",
       });
       throw error;

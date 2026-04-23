@@ -13,7 +13,10 @@ export interface BriefingEmailJobRecord {
   date?: string;
   edition?: BriefingEdition;
   briefingId?: string;
+  totalRecipientCount?: number;
+  attemptedRecipientCount?: number;
   recipientCount?: number;
+  failedRecipientCount?: number;
   reason?: string;
   error?: string;
 }
@@ -26,6 +29,8 @@ const jobs = new Map<string, BriefingEmailJobRecord>();
 const storageSettings = getBriefingStorageSettings();
 const environment = getEnvironmentSettings();
 const MAX_PERSISTED_EMAIL_JOBS = 30;
+const EMAIL_JOB_STALE_MINUTES = 20;
+const RECENT_DUPLICATE_EMAIL_WINDOW_MINUTES = 30;
 const DEFAULT_STORAGE_FILE = path.join(process.cwd(), ".data", "briefing-email-jobs.json");
 const storageFilePath = environment.isProduction && process.env.HOME
   ? `${process.env.HOME}/data/briefing-email-jobs.json`
@@ -56,6 +61,19 @@ function createEmptyStore(): PersistedBriefingEmailJobStoreFile {
 
 function cloneJob(record: BriefingEmailJobRecord): BriefingEmailJobRecord {
   return { ...record };
+}
+
+function isOlderThanMinutes(timestamp: string, minutes: number): boolean {
+  const parsed = new Date(timestamp);
+  if (Number.isNaN(parsed.getTime())) {
+    return false;
+  }
+
+  return (Date.now() - parsed.getTime()) > minutes * 60_000;
+}
+
+function isStaleRunningJob(record: BriefingEmailJobRecord): boolean {
+  return record.status === "running" && isOlderThanMinutes(record.updatedAt, EMAIL_JOB_STALE_MINUTES);
 }
 
 function normalizeJobs(records: BriefingEmailJobRecord[]): BriefingEmailJobRecord[] {
@@ -183,7 +201,10 @@ function updateJob(
     date: patch.date ?? existing?.date ?? defaults.date,
     edition: patch.edition ?? existing?.edition ?? defaults.edition,
     briefingId: patch.briefingId ?? existing?.briefingId ?? defaults.briefingId,
+    totalRecipientCount: patch.totalRecipientCount ?? existing?.totalRecipientCount ?? defaults.totalRecipientCount,
+    attemptedRecipientCount: patch.attemptedRecipientCount ?? existing?.attemptedRecipientCount ?? defaults.attemptedRecipientCount,
     recipientCount: patch.recipientCount ?? existing?.recipientCount ?? defaults.recipientCount,
+    failedRecipientCount: patch.failedRecipientCount ?? existing?.failedRecipientCount ?? defaults.failedRecipientCount,
     reason: patch.reason ?? existing?.reason ?? defaults.reason,
     error: patch.error ?? existing?.error ?? defaults.error,
   };
@@ -196,15 +217,41 @@ export function recordBriefingEmailJobStarted(input: {
   date?: string;
   edition?: BriefingEdition;
   briefingId?: string;
+  totalRecipientCount?: number;
 }): BriefingEmailJobRecord {
   return updateJob(input.id, {
     status: "running",
     date: input.date,
     edition: input.edition,
     briefingId: input.briefingId,
+    totalRecipientCount: input.totalRecipientCount,
+    attemptedRecipientCount: 0,
     recipientCount: undefined,
+    failedRecipientCount: 0,
     reason: undefined,
     error: undefined,
+  });
+}
+
+export function recordBriefingEmailJobProgress(input: {
+  id: string;
+  date?: string;
+  edition?: BriefingEdition;
+  briefingId?: string;
+  totalRecipientCount?: number;
+  attemptedRecipientCount?: number;
+  recipientCount?: number;
+  failedRecipientCount?: number;
+}): BriefingEmailJobRecord {
+  return updateJob(input.id, {
+    status: "running",
+    date: input.date,
+    edition: input.edition,
+    briefingId: input.briefingId,
+    totalRecipientCount: input.totalRecipientCount,
+    attemptedRecipientCount: input.attemptedRecipientCount,
+    recipientCount: input.recipientCount,
+    failedRecipientCount: input.failedRecipientCount,
   });
 }
 
@@ -213,14 +260,20 @@ export function recordBriefingEmailJobCompleted(input: {
   date?: string;
   edition?: BriefingEdition;
   briefingId?: string;
+  totalRecipientCount?: number;
+  attemptedRecipientCount?: number;
   recipientCount?: number;
+  failedRecipientCount?: number;
 }): BriefingEmailJobRecord {
   return updateJob(input.id, {
     status: "completed",
     date: input.date,
     edition: input.edition,
     briefingId: input.briefingId,
+    totalRecipientCount: input.totalRecipientCount,
+    attemptedRecipientCount: input.attemptedRecipientCount,
     recipientCount: input.recipientCount,
+    failedRecipientCount: input.failedRecipientCount,
     reason: undefined,
     error: undefined,
   });
@@ -231,6 +284,10 @@ export function recordBriefingEmailJobSkipped(input: {
   date?: string;
   edition?: BriefingEdition;
   briefingId?: string;
+  totalRecipientCount?: number;
+  attemptedRecipientCount?: number;
+  recipientCount?: number;
+  failedRecipientCount?: number;
   reason?: string;
 }): BriefingEmailJobRecord {
   return updateJob(input.id, {
@@ -238,7 +295,10 @@ export function recordBriefingEmailJobSkipped(input: {
     date: input.date,
     edition: input.edition,
     briefingId: input.briefingId,
-    recipientCount: undefined,
+    totalRecipientCount: input.totalRecipientCount,
+    attemptedRecipientCount: input.attemptedRecipientCount,
+    recipientCount: input.recipientCount,
+    failedRecipientCount: input.failedRecipientCount,
     reason: input.reason,
     error: undefined,
   });
@@ -249,6 +309,10 @@ export function recordBriefingEmailJobFailed(input: {
   date?: string;
   edition?: BriefingEdition;
   briefingId?: string;
+  totalRecipientCount?: number;
+  attemptedRecipientCount?: number;
+  recipientCount?: number;
+  failedRecipientCount?: number;
   error?: string;
 }): BriefingEmailJobRecord {
   return updateJob(input.id, {
@@ -256,13 +320,28 @@ export function recordBriefingEmailJobFailed(input: {
     date: input.date,
     edition: input.edition,
     briefingId: input.briefingId,
-    recipientCount: undefined,
+    totalRecipientCount: input.totalRecipientCount,
+    attemptedRecipientCount: input.attemptedRecipientCount,
+    recipientCount: input.recipientCount,
+    failedRecipientCount: input.failedRecipientCount,
     reason: undefined,
     error: input.error,
   });
 }
 
+async function cleanupStaleRunningJobs(): Promise<void> {
+  const persisted = await getPersistedJobs();
+  const stalePersisted = persisted.filter(isStaleRunningJob);
+  for (const record of stalePersisted) {
+    updateJob(record.id, {
+      status: "failed",
+      error: record.error ?? "Email job exceeded the running timeout and was marked as failed.",
+    }, record);
+  }
+}
+
 export async function getLatestBriefingEmailJob(): Promise<BriefingEmailJobRecord | null> {
+  await cleanupStaleRunningJobs();
   const live = [...jobs.values()].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
   if (live) {
     return cloneJob(live);
@@ -273,6 +352,7 @@ export async function getLatestBriefingEmailJob(): Promise<BriefingEmailJobRecor
 }
 
 export async function listRecentBriefingEmailJobs(limit = 10): Promise<BriefingEmailJobRecord[]> {
+  await cleanupStaleRunningJobs();
   const combined = normalizeJobs([
     ...[...jobs.values()].map(cloneJob),
     ...(await getPersistedJobs()),
@@ -286,6 +366,20 @@ export async function listRecentBriefingEmailJobs(limit = 10): Promise<BriefingE
     seen.add(job.id);
     return true;
   }).slice(0, Math.max(1, limit));
+}
+
+export async function findRecentBriefingEmailJobForBriefing(
+  briefingId: string,
+): Promise<BriefingEmailJobRecord | null> {
+  await cleanupStaleRunningJobs();
+  const combined = await listRecentBriefingEmailJobs(MAX_PERSISTED_EMAIL_JOBS);
+  const record = combined.find((job) =>
+    job.briefingId === briefingId
+    && (job.status === "running"
+      || ((job.status === "completed" || job.status === "skipped") && !isOlderThanMinutes(job.updatedAt, RECENT_DUPLICATE_EMAIL_WINDOW_MINUTES))),
+  );
+
+  return record ? cloneJob(record) : null;
 }
 
 async function streamToString(stream: NodeJS.ReadableStream | null | undefined): Promise<string> {

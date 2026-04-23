@@ -150,7 +150,10 @@ export interface BriefingOperationalStatus {
       date?: string;
       edition?: BriefingEdition;
       briefingId?: string;
+      totalRecipientCount?: number;
+      attemptedRecipientCount?: number;
       recipientCount?: number;
+      failedRecipientCount?: number;
       reason?: string;
       error?: string;
     }>;
@@ -162,7 +165,10 @@ export interface BriefingOperationalStatus {
     date?: string;
     edition?: BriefingEdition;
     briefingId?: string;
+    totalRecipientCount?: number;
+    attemptedRecipientCount?: number;
     recipientCount?: number;
+    failedRecipientCount?: number;
     reason?: string;
     error?: string;
   };

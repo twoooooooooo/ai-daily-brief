@@ -7,8 +7,10 @@ import {
 } from "../services/dailyBriefingJobService.js";
 import { getLatestBriefingForEdition, getBriefingByDateAndEdition } from "../services/briefingRepository.js";
 import {
+  findRecentBriefingEmailJobForBriefing,
   recordBriefingEmailJobCompleted,
   recordBriefingEmailJobFailed,
+  recordBriefingEmailJobProgress,
   recordBriefingEmailJobSkipped,
   recordBriefingEmailJobStarted,
 } from "../services/briefingEmailJobService.js";
@@ -135,6 +137,28 @@ export async function scheduledBriefingEmailHandler(
     return;
   }
 
+  const existingJob = await findRecentBriefingEmailJobForBriefing(briefing.id);
+  if (existingJob) {
+    recordBriefingEmailJobSkipped({
+      id: emailJobId,
+      date: briefing.date,
+      edition: briefing.edition,
+      briefingId: briefing.id,
+      totalRecipientCount: existingJob.totalRecipientCount,
+      attemptedRecipientCount: existingJob.attemptedRecipientCount,
+      recipientCount: existingJob.recipientCount,
+      failedRecipientCount: existingJob.failedRecipientCount,
+      reason: existingJob.status === "running" ? "duplicate-running-job" : "duplicate-completed-job",
+    });
+    scopedLogger.warn("Scheduled briefing email job skipped because a recent job already exists for the briefing.", {
+      edition,
+      briefingId: briefing.id,
+      existingJobId: existingJob.id,
+      existingJobStatus: existingJob.status,
+    });
+    return;
+  }
+
   try {
     recordBriefingEmailJobStarted({
       id: emailJobId,
@@ -148,6 +172,19 @@ export async function scheduledBriefingEmailHandler(
       invocationId: context.invocationId,
       operationName: "scheduledBriefingEmail",
       component: "briefing-email",
+    }, {
+      onProgress: (progress) => {
+        recordBriefingEmailJobProgress({
+          id: emailJobId,
+          date: briefing.date,
+          edition: briefing.edition,
+          briefingId: briefing.id,
+          totalRecipientCount: progress.totalRecipientCount,
+          attemptedRecipientCount: progress.attemptedRecipientCount,
+          recipientCount: progress.deliveredRecipientCount,
+          failedRecipientCount: progress.failedRecipientCount,
+        });
+      },
     });
 
     if (result.skipped) {
@@ -164,7 +201,9 @@ export async function scheduledBriefingEmailHandler(
         date: briefing.date,
         edition: briefing.edition,
         briefingId: briefing.id,
+        attemptedRecipientCount: (result.recipientCount ?? 0) + (result.failedRecipientCount ?? 0),
         recipientCount: result.recipientCount,
+        failedRecipientCount: result.failedRecipientCount,
       });
     }
 
@@ -180,6 +219,7 @@ export async function scheduledBriefingEmailHandler(
       date: briefing.date,
       edition: briefing.edition,
       briefingId: briefing.id,
+      failedRecipientCount: undefined,
       error: error instanceof Error ? error.message : "Unknown scheduled email failure.",
     });
     scopedLogger.exception("Scheduled briefing email job failed.", error, {
