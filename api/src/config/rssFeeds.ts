@@ -185,6 +185,7 @@ export const rssFeeds: RssFeedConfig[] = [
     kind: "news",
     category: "Product",
     region: "Asia",
+    keywordFilters: DOMESTIC_AI_KEYWORD_FILTERS,
   },
   {
     id: "skt-newsroom",
@@ -230,6 +231,7 @@ export const rssFeeds: RssFeedConfig[] = [
     kind: "news",
     category: "Model",
     region: "Asia",
+    keywordFilters: DOMESTIC_AI_KEYWORD_FILTERS,
   },
   {
     id: "arxiv-cs-ai",
