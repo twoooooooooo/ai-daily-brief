@@ -2,7 +2,7 @@ name: Scheduled Briefing Jobs
 
 on:
   schedule:
-    - cron: "0 15 * * *" # 00:00 KST Morning briefing generation
+    - cron: "0 21 * * *" # 06:00 KST Morning briefing generation
     - cron: "0 23 * * *" # 08:00 KST Morning email delivery
     - cron: "0 3 * * *"  # 12:00 KST Afternoon briefing generation
     - cron: "50 3 * * *" # 12:50 KST Afternoon email delivery
@@ -35,7 +35,7 @@ jobs:
             task="${{ inputs.task }}"
           else
             case "${{ github.event.schedule }}" in
-              "0 15 * * *") task="generate-morning" ;;
+              "0 21 * * *") task="generate-morning" ;;
               "0 23 * * *") task="email-morning" ;;
               "0 3 * * *") task="generate-afternoon" ;;
               "50 3 * * *") task="email-afternoon" ;;
