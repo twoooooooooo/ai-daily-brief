@@ -608,6 +608,11 @@ export async function sendBriefingEmailHandler(
           });
         },
       });
+      if (testRecipients.length > 0 && (result.failedRecipientCount ?? 0) > 0) {
+        throw new Error(
+          `${result.failedRecipientCount} of ${testRecipients.length} test recipients failed to receive the briefing email.`,
+        );
+      }
       if (result.skipped) {
         recordBriefingEmailJobSkipped({
           id: emailJobId,
