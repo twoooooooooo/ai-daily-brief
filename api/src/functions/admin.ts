@@ -148,6 +148,24 @@ function isValidEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim().toLowerCase());
 }
 
+function parseTestRecipients(request: HttpRequest): { recipients: string[]; invalid: string[] } {
+  const singleRecipient = request.query.get("testRecipient")?.trim().toLowerCase();
+  const multiRecipients = request.query.get("testRecipients")?.trim() ?? "";
+  const combined = [
+    ...(singleRecipient ? [singleRecipient] : []),
+    ...multiRecipients
+      .split(",")
+      .map((value) => value.trim().toLowerCase())
+      .filter(Boolean),
+  ];
+
+  const uniqueRecipients = [...new Set(combined)];
+  const invalid = uniqueRecipients.filter((value) => !isValidEmail(value));
+  const recipients = uniqueRecipients.filter((value) => isValidEmail(value));
+
+  return { recipients, invalid };
+}
+
 export async function ingestRssHandler(
   request: HttpRequest,
   context: InvocationContext,
@@ -524,9 +542,9 @@ export async function sendBriefingEmailHandler(
 
     const edition = parseOptionalEdition(request.query.get("edition")) ?? "Afternoon";
     const date = request.query.get("date")?.trim() || resolveBriefingDate();
-    const testRecipient = request.query.get("testRecipient")?.trim().toLowerCase();
-    if (testRecipient && !isValidEmail(testRecipient)) {
-      return badRequestResponse("A valid testRecipient email address is required.");
+    const { recipients: testRecipients, invalid: invalidTestRecipients } = parseTestRecipients(request);
+    if (invalidTestRecipients.length > 0) {
+      return badRequestResponse("All testRecipient/testRecipients email addresses must be valid.");
     }
     const briefing = await getBriefingByDateAndEdition(date, edition) ?? await getLatestBriefingForEdition(edition);
     const emailJobId = createCorrelationId(`manual-email-${edition.toLowerCase()}`);
@@ -541,7 +559,7 @@ export async function sendBriefingEmailHandler(
       return notFoundResponse("No persisted briefing was available for email delivery.");
     }
 
-    if (!testRecipient) {
+    if (testRecipients.length === 0) {
       const existingJob = await findRecentBriefingEmailJobForBriefing(briefing.id);
       if (existingJob) {
         recordBriefingEmailJobSkipped({
@@ -562,7 +580,7 @@ export async function sendBriefingEmailHandler(
           briefingId: briefing.id,
           recipientCount: existingJob.recipientCount ?? 0,
           failedRecipientCount: existingJob.failedRecipientCount ?? 0,
-          testRecipient: null,
+          testRecipients: [],
         });
       }
     }
@@ -576,7 +594,7 @@ export async function sendBriefingEmailHandler(
       });
 
       const result = await sendBriefingEmail(briefing, logContext, {
-        overrideRecipients: testRecipient ? [testRecipient] : undefined,
+        overrideRecipients: testRecipients.length > 0 ? testRecipients : undefined,
         onProgress: (progress) => {
           recordBriefingEmailJobProgress({
             id: emailJobId,
@@ -604,7 +622,7 @@ export async function sendBriefingEmailHandler(
           date: briefing.date,
           edition: briefing.edition,
           briefingId: briefing.id,
-          totalRecipientCount: testRecipient ? 1 : undefined,
+          totalRecipientCount: testRecipients.length > 0 ? testRecipients.length : undefined,
           attemptedRecipientCount: (result.recipientCount ?? 0) + (result.failedRecipientCount ?? 0),
           recipientCount: result.recipientCount,
           failedRecipientCount: result.failedRecipientCount,
@@ -618,7 +636,7 @@ export async function sendBriefingEmailHandler(
         briefingId: briefing.id,
         recipientCount: result.recipientCount ?? 0,
         failedRecipientCount: result.failedRecipientCount ?? 0,
-        testRecipient: testRecipient ?? null,
+        testRecipients,
       });
     } catch (error) {
       recordBriefingEmailJobFailed({
@@ -626,7 +644,7 @@ export async function sendBriefingEmailHandler(
         date: briefing.date,
         edition: briefing.edition,
         briefingId: briefing.id,
-        totalRecipientCount: testRecipient ? 1 : undefined,
+        totalRecipientCount: testRecipients.length > 0 ? testRecipients.length : undefined,
         error: extractErrorMessage(error) ?? "Unknown email delivery failure.",
       });
       throw error;
