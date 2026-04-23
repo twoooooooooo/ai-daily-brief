@@ -1,0 +1,87 @@
+name: Scheduled Briefing Jobs
+
+on:
+  schedule:
+    - cron: "0 15 * * *" # 00:00 KST Morning briefing generation
+    - cron: "0 23 * * *" # 08:00 KST Morning email delivery
+    - cron: "0 3 * * *"  # 12:00 KST Afternoon briefing generation
+    - cron: "50 3 * * *" # 12:50 KST Afternoon email delivery
+  workflow_dispatch:
+    inputs:
+      task:
+        description: "Manual scheduled task to run"
+        required: true
+        type: choice
+        options:
+          - generate-morning
+          - generate-afternoon
+          - email-morning
+          - email-afternoon
+
+concurrency:
+  group: scheduled-briefing-jobs-${{ github.event.schedule || inputs.task || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Resolve task
+        id: resolve
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            task="${{ inputs.task }}"
+          else
+            case "${{ github.event.schedule }}" in
+              "0 15 * * *") task="generate-morning" ;;
+              "0 23 * * *") task="email-morning" ;;
+              "0 3 * * *") task="generate-afternoon" ;;
+              "50 3 * * *") task="email-afternoon" ;;
+              *)
+                echo "Unknown schedule: ${{ github.event.schedule }}"
+                exit 1
+                ;;
+            esac
+          fi
+
+          echo "task=${task}" >> "$GITHUB_OUTPUT"
+          echo "Resolved task: ${task}"
+
+      - name: Trigger scheduled API endpoint
+        shell: bash
+        env:
+          ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
+          BRIEFING_BASE_URL: https://lemon-sea-076f4910f.6.azurestaticapps.net
+          TASK: ${{ steps.resolve.outputs.task }}
+        run: |
+          if [ -z "${ADMIN_API_KEY}" ]; then
+            echo "Missing required GitHub secret: ADMIN_API_KEY"
+            exit 1
+          fi
+
+          case "${TASK}" in
+            generate-morning)
+              endpoint="/api/ops/run-daily-briefing?edition=Morning"
+              ;;
+            generate-afternoon)
+              endpoint="/api/ops/run-daily-briefing?edition=Afternoon"
+              ;;
+            email-morning)
+              endpoint="/api/ops/send-briefing-email?edition=Morning"
+              ;;
+            email-afternoon)
+              endpoint="/api/ops/send-briefing-email?edition=Afternoon"
+              ;;
+            *)
+              echo "Unknown task: ${TASK}"
+              exit 1
+              ;;
+          esac
+
+          echo "Calling scheduled task: ${TASK}"
+          curl --fail --silent --show-error --retry 3 --retry-delay 20 \
+            -H "x-admin-key: ${ADMIN_API_KEY}" \
+            -H "accept: application/json" \
+            "${BRIEFING_BASE_URL}${endpoint}"

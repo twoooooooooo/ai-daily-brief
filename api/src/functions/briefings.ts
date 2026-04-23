@@ -7,7 +7,7 @@ import { getBriefingStoreStatus } from "../repositories/briefingStoreProvider.js
 import { getSubscriberStats } from "../repositories/subscriberStore.js";
 import { getBriefingEmailSettings, getDailyBriefingScheduleSettings } from "../config/runtimeConfig.js";
 import { getLatestDailyBriefingJob, listRecentDailyBriefingJobs } from "../services/dailyBriefingJobService.js";
-import { getLatestBriefingEmailJob } from "../services/briefingEmailJobService.js";
+import { getLatestBriefingEmailJob, listRecentBriefingEmailJobs } from "../services/briefingEmailJobService.js";
 import { getLatestBriefingSelectionDiagnostics } from "../services/briefingSelectionDiagnosticsService.js";
 import type { Briefing, Issue } from "../shared/contracts.js";
 
@@ -196,7 +196,8 @@ export async function getOperationalStatusHandler(
     const latestBriefing = await getLatestPersistedBriefing();
     const latestJob = await getLatestDailyBriefingJob();
     const recentJobs = await listRecentDailyBriefingJobs(10);
-    const latestEmailJob = getLatestBriefingEmailJob();
+    const latestEmailJob = await getLatestBriefingEmailJob();
+    const recentEmailJobs = await listRecentBriefingEmailJobs(10);
     const latestSelection = await getLatestBriefingSelectionDiagnostics();
     const emailSettings = getBriefingEmailSettings();
     const subscriberStats = await getSubscriberStats();
@@ -241,6 +242,17 @@ export async function getOperationalStatusHandler(
           briefingId: job.briefingId,
           overwrite: job.overwrite,
           trigger: job.trigger,
+          error: job.error,
+        })),
+        email: recentEmailJobs.map((job) => ({
+          id: job.id,
+          status: job.status,
+          updatedAt: job.updatedAt,
+          date: job.date,
+          edition: job.edition,
+          briefingId: job.briefingId,
+          recipientCount: job.recipientCount,
+          reason: job.reason,
           error: job.error,
         })),
       },

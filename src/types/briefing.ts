@@ -144,6 +144,17 @@ export interface BriefingOperationalStatus {
       trigger?: DailyBriefingJobTrigger;
       error?: string;
     }>;
+    email: Array<{
+      id: string;
+      status: "running" | "completed" | "failed" | "skipped";
+      updatedAt: string;
+      date?: string;
+      edition?: BriefingEdition;
+      briefingId?: string;
+      recipientCount?: number;
+      reason?: string;
+      error?: string;
+    }>;
   };
   latestSelection?: {
     updatedAt: string;
