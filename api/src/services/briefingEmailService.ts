@@ -335,10 +335,12 @@ export async function sendBriefingEmail(
   });
 
   for (const batch of recipientBatches) {
-    const primaryAddress = batch[0];
-    const bccAddresses = batch.slice(1);
-    const unsubscribeUrl = batch.length === 1
-      ? buildRecipientUnsubscribeLink(primaryAddress)
+    const directRecipientAddress = batch[0];
+    const useDirectRecipientTo = Boolean(options.overrideRecipients);
+    const toAddress = useDirectRecipientTo ? directRecipientAddress : senderAddress;
+    const bccAddresses = useDirectRecipientTo ? batch.slice(1) : batch;
+    const unsubscribeUrl = useDirectRecipientTo && batch.length === 1
+      ? buildRecipientUnsubscribeLink(directRecipientAddress)
       : settings.siteUrl;
     const plainText = buildPlainTextBody(briefing, settings.siteUrl, unsubscribeUrl);
     const html = buildHtmlBody(briefing, settings.siteUrl, unsubscribeUrl);
@@ -359,7 +361,7 @@ export async function sendBriefingEmail(
               html,
             },
             recipients: {
-              to: [{ address: primaryAddress }],
+              to: [{ address: toAddress }],
               ...(bccAddresses.length > 0
                 ? {
                     bcc: bccAddresses.map((address) => ({ address })),
@@ -373,14 +375,14 @@ export async function sendBriefingEmail(
           const result = await poller.pollUntilDone();
           if (result.status.toLowerCase() !== "succeeded") {
             throw buildEmailSendError(
-              `${primaryAddress}${bccAddresses.length > 0 ? ` (+${bccAddresses.length} bcc)` : ""}`,
+              `${toAddress}${bccAddresses.length > 0 ? ` (+${bccAddresses.length} bcc)` : ""}`,
               new Error(`Email send finished with status ${result.status}`),
               poller,
             );
           }
         } catch (error) {
           throw buildEmailSendError(
-            `${primaryAddress}${bccAddresses.length > 0 ? ` (+${bccAddresses.length} bcc)` : ""}`,
+            `${toAddress}${bccAddresses.length > 0 ? ` (+${bccAddresses.length} bcc)` : ""}`,
             error,
             poller,
           );
@@ -394,7 +396,7 @@ export async function sendBriefingEmail(
 
       deliveredRecipientCount += batch.length;
     } catch (error) {
-      const message = extractErrorMessage(error) ?? `Failed to send briefing email to batch beginning with ${primaryAddress}.`;
+      const message = extractErrorMessage(error) ?? `Failed to send briefing email to batch beginning with ${toAddress}.`;
       failedRecipients.push(
         ...batch.map((address) => ({
           address,
@@ -403,7 +405,7 @@ export async function sendBriefingEmail(
       );
       scopedLogger.warn("Failed to deliver briefing email to recipient.", {
         briefingId: briefing.id,
-        primaryRecipient: primaryAddress,
+        primaryRecipient: toAddress,
         batchRecipientCount: batch.length,
         error: message,
       });
