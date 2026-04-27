@@ -42,6 +42,42 @@ const DEFAULT_STORAGE_FILE = path.join(process.cwd(), ".data", "subscribers.json
 const storageFilePath = storageSettings.filePath || DEFAULT_STORAGE_FILE;
 const CONFIRMATION_EMAIL_RETRY_DELAYS_MINUTES = [5, 15, 30, 60, 120, 240];
 
+function isValidSubscriberEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim().toLowerCase());
+}
+
+function sanitizeSubscribers(subscribers: SubscriberRecord[]): SubscriberRecord[] {
+  const deduped = new Map<string, SubscriberRecord>();
+
+  for (const subscriber of subscribers) {
+    const normalizedEmail = typeof subscriber.email === "string"
+      ? subscriber.email.trim().toLowerCase()
+      : "";
+
+    if (!normalizedEmail || !isValidSubscriberEmail(normalizedEmail)) {
+      continue;
+    }
+
+    const normalizedSubscriber: SubscriberRecord = {
+      ...subscriber,
+      email: normalizedEmail,
+    };
+
+    const existing = deduped.get(normalizedEmail);
+    if (!existing) {
+      deduped.set(normalizedEmail, normalizedSubscriber);
+      continue;
+    }
+
+    deduped.set(
+      normalizedEmail,
+      existing.updatedAt >= normalizedSubscriber.updatedAt ? existing : normalizedSubscriber,
+    );
+  }
+
+  return [...deduped.values()];
+}
+
 function createEmptyStore(): PersistedSubscriberFile {
   return { subscribers: [] };
 }
@@ -107,12 +143,21 @@ async function loadBlobStore(): Promise<PersistedSubscriberFile> {
 
   const download = await blobClient.download();
   const raw = await streamToString(download.readableStreamBody);
-  return raw.trim() ? JSON.parse(raw) as PersistedSubscriberFile : createEmptyStore();
+  if (!raw.trim()) {
+    return createEmptyStore();
+  }
+
+  const parsed = JSON.parse(raw) as PersistedSubscriberFile;
+  return {
+    subscribers: sanitizeSubscribers(Array.isArray(parsed.subscribers) ? parsed.subscribers : []),
+  };
 }
 
 async function saveBlobStore(store: PersistedSubscriberFile): Promise<void> {
   const blobClient = await getBlobClient();
-  const body = `${JSON.stringify(store, null, 2)}\n`;
+  const body = `${JSON.stringify({
+    subscribers: sanitizeSubscribers(store.subscribers),
+  }, null, 2)}\n`;
   await blobClient.upload(body, Buffer.byteLength(body), {
     blobHTTPHeaders: {
       blobContentType: "application/json; charset=utf-8",
@@ -123,7 +168,14 @@ async function saveBlobStore(store: PersistedSubscriberFile): Promise<void> {
 async function loadFileStore(): Promise<PersistedSubscriberFile> {
   try {
     const raw = await readFile(storageFilePath, "utf-8");
-    return raw.trim() ? JSON.parse(raw) as PersistedSubscriberFile : createEmptyStore();
+    if (!raw.trim()) {
+      return createEmptyStore();
+    }
+
+    const parsed = JSON.parse(raw) as PersistedSubscriberFile;
+    return {
+      subscribers: sanitizeSubscribers(Array.isArray(parsed.subscribers) ? parsed.subscribers : []),
+    };
   } catch (error) {
     if (error instanceof Error && "code" in error && error.code === "ENOENT") {
       return createEmptyStore();
@@ -135,7 +187,9 @@ async function loadFileStore(): Promise<PersistedSubscriberFile> {
 
 async function saveFileStore(store: PersistedSubscriberFile): Promise<void> {
   await mkdir(path.dirname(storageFilePath), { recursive: true });
-  await writeFile(storageFilePath, `${JSON.stringify(store, null, 2)}\n`, "utf-8");
+  await writeFile(storageFilePath, `${JSON.stringify({
+    subscribers: sanitizeSubscribers(store.subscribers),
+  }, null, 2)}\n`, "utf-8");
 }
 
 async function loadStore(): Promise<PersistedSubscriberFile> {
