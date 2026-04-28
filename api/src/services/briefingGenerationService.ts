@@ -32,7 +32,6 @@ const MAX_GENERATION_ARTICLES = 16;
 const MIN_GENERATION_TOTAL_SCORE = 0.5;
 const MAX_NEWS_AGE_HOURS = 48;
 const MAX_RESEARCH_AGE_HOURS = 168;
-const MAX_RESEARCH_SELECTION = 4;
 const MAX_CLUSTER_SELECTION = 2;
 const PRIORITY_SIGNAL_KEYWORDS = [
   "launch", "released", "release", "announced", "announcement", "introducing", "funding", "raises",
@@ -949,6 +948,30 @@ function seedClusterRepresentatives(scoredArticles: ArticleScoreBreakdown[]): Ar
   });
 }
 
+function getDynamicResearchSelectionLimit(scoredArticles: ArticleScoreBreakdown[]): number {
+  const newsArticles = scoredArticles.filter((entry) => entry.article.type === "news");
+  const strongNewsCount = newsArticles.filter((entry) => entry.totalScore >= 12).length;
+  const strategicCloudStoryCount = newsArticles.filter((entry) => isStrategicCloudDistributionStory(entry.article)).length;
+  const investmentOrInfrastructureCount = newsArticles.filter((entry) => {
+    const category = getEffectiveCategory(entry.article);
+    return category === "Investment" || category === "Infrastructure";
+  }).length;
+
+  if (strongNewsCount >= 8 || strategicCloudStoryCount >= 1) {
+    return 3;
+  }
+
+  if (strongNewsCount >= 5 || investmentOrInfrastructureCount >= 4) {
+    return 4;
+  }
+
+  if (newsArticles.length <= 4) {
+    return 6;
+  }
+
+  return 5;
+}
+
 function getImportanceSeedScore(importance: Briefing["issues"][number]["importance"]): number {
   switch (importance) {
     case "High":
@@ -1107,6 +1130,7 @@ function selectArticlesForGeneration(
     });
   const viableScoredArticles = scoredArticles.filter((entry) => entry.totalScore >= MIN_GENERATION_TOTAL_SCORE);
   const scoredSelectionPool = viableScoredArticles.length > 0 ? viableScoredArticles : scoredArticles;
+  const maxResearchSelection = getDynamicResearchSelectionLimit(scoredSelectionPool);
   const rankedArticles = scoredSelectionPool.map((entry) => withEffectiveCategory(entry.article));
   const clusterRepresentatives = seedClusterRepresentatives(scoredSelectionPool);
 
@@ -1138,7 +1162,7 @@ function selectArticlesForGeneration(
       return false;
     }
 
-    if (article.type === "research" && typeCount >= MAX_RESEARCH_SELECTION) {
+    if (article.type === "research" && typeCount >= maxResearchSelection) {
       return false;
     }
 
