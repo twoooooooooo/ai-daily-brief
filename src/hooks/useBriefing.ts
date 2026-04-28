@@ -68,6 +68,7 @@ export function useArchive() {
     queryFn: () => searchArchiveBriefings(filters),
     staleTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,
+    placeholderData: (previousData) => previousData,
   });
 
   return {

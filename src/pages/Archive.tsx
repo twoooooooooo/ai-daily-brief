@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import Header from "@/components/Header";
 import { useArchive } from "@/hooks/useBriefing";
@@ -50,11 +50,17 @@ const Archive = () => {
 
   const [dateFromOpen, setDateFromOpen] = useState(false);
   const [dateToOpen, setDateToOpen] = useState(false);
+  const [searchInput, setSearchInput] = useState(filters.search);
   const groupedBriefings = groupBriefingsByDate(briefings);
 
   const chipBase = "inline-flex items-center rounded-full px-3 py-1.5 text-xs font-medium transition-all duration-200 cursor-pointer select-none";
   const chipActive = "bg-foreground text-background shadow-sm";
   const chipInactive = "bg-card text-muted-foreground hover:text-foreground hover:bg-secondary border border-transparent hover:border-border";
+
+  const handleSearchSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSearch(searchInput.trim());
+  };
 
   if (isLoading) {
     return (
@@ -100,15 +106,20 @@ const Archive = () => {
         <div className="flex flex-col gap-4">
           {/* Search + date range */}
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="요약, 제목, 키워드, 출처로 검색..."
-                value={filters.search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="h-9 pl-9 text-sm bg-background/60"
-              />
-            </div>
+            <form onSubmit={handleSearchSubmit} className="flex flex-1 max-w-md items-center gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="요약, 제목, 키워드, 출처로 검색..."
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  className="h-9 pl-9 text-sm bg-background/60"
+                />
+              </div>
+              <Button type="submit" size="sm" className="h-9 px-4 text-xs">
+                검색
+              </Button>
+            </form>
             <div className="flex items-center gap-2">
               <Popover open={dateFromOpen} onOpenChange={setDateFromOpen}>
                 <PopoverTrigger asChild>
