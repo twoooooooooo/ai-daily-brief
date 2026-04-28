@@ -32,6 +32,8 @@ const MAX_GENERATION_ARTICLES = 16;
 const MIN_GENERATION_TOTAL_SCORE = 0.5;
 const MAX_NEWS_AGE_HOURS = 48;
 const MAX_RESEARCH_AGE_HOURS = 168;
+const MAX_RESEARCH_SELECTION = 4;
+const MAX_CLUSTER_SELECTION = 2;
 const PRIORITY_SIGNAL_KEYWORDS = [
   "launch", "released", "release", "announced", "announcement", "introducing", "funding", "raises",
   "acquire", "acquired", "acquisition", "buy", "buys", "buying", "option to buy", "deal", "merger", "stake",
@@ -41,7 +43,41 @@ const PRIORITY_SIGNAL_KEYWORDS = [
   "chip", "gpu", "semiconductor", "inference", "training", "data center", "compute", "workload",
   "search", "assistant", "coding", "open source", "governance",
 ] as const;
+const STRATEGIC_CLOUD_PROVIDER_KEYWORDS = [
+  "aws",
+  "amazon web services",
+  "bedrock",
+  "azure",
+  "google cloud",
+  "cloud provider",
+  "third party cloud",
+] as const;
+const STRATEGIC_RELATIONSHIP_KEYWORDS = [
+  "partnership",
+  "exclusive",
+  "non exclusive",
+  "nonexclusive",
+  "available",
+  "distribution",
+  "deal",
+  "hosted",
+  "serve all its products",
+  "directly to customers",
+] as const;
 const TOPIC_CLUSTER_KEYWORDS: Record<string, string[]> = {
+  cloud_distribution: [
+    "cloud provider",
+    "third party cloud",
+    "available on aws",
+    "available directly to customers",
+    "aws bedrock",
+    "amazon bedrock",
+    "google cloud",
+    "stateful runtime",
+    "non exclusive",
+    "nonexclusive",
+    "exclusive rights",
+  ],
   openai: ["openai", "gpt", "chatgpt", "sora"],
   google: ["google", "gemini", "deepmind", "search live"],
   anthropic: ["anthropic", "claude"],
@@ -65,6 +101,10 @@ const SELECTION_SLOT_DEFINITIONS = [
   {
     id: "domestic-trend",
     matches: (article: NormalizedArticle) => article.type === "news" && isDomesticSourceName(article.source),
+  },
+  {
+    id: "strategic-cloud-distribution",
+    matches: (article: NormalizedArticle) => article.type === "news" && isStrategicCloudDistributionStory(article),
   },
   {
     id: "market-infrastructure",
@@ -444,6 +484,17 @@ function getCategoryReason(article: NormalizedArticle): string | null {
   }
 }
 
+function isStrategicCloudDistributionStory(article: NormalizedArticle): boolean {
+  const text = normalizeText(`${article.title} ${article.summary} ${article.content ?? ""}`);
+  const hasProviderSignal = STRATEGIC_CLOUD_PROVIDER_KEYWORDS.some((keyword) => text.includes(normalizeText(keyword)));
+  const hasRelationshipSignal = STRATEGIC_RELATIONSHIP_KEYWORDS.some((keyword) => text.includes(normalizeText(keyword)));
+  const hasMajorAiVendorSignal = ["openai", "anthropic", "google", "microsoft", "amazon"].some((keyword) =>
+    text.includes(normalizeText(keyword))
+  );
+
+  return hasProviderSignal && hasRelationshipSignal && hasMajorAiVendorSignal;
+}
+
 function getArticleAgeHours(article: NormalizedArticle): number | null {
   if (!article.publishedAt || !article.publishedAtKnown) {
     return null;
@@ -522,15 +573,27 @@ function getGitHubTrendingSignalPriority(article: NormalizedArticle, signals: Gi
 
 function getSignalPriority(article: NormalizedArticle): number {
   const text = `${article.title} ${article.summary}`.toLowerCase();
-  return PRIORITY_SIGNAL_KEYWORDS.reduce((score, signal) => score + (text.includes(signal) ? 0.28 : 0), 0);
+  let score = PRIORITY_SIGNAL_KEYWORDS.reduce((total, signal) => total + (text.includes(signal) ? 0.28 : 0), 0);
+
+  if (isStrategicCloudDistributionStory(article)) {
+    score += 1.4;
+  }
+
+  return score;
 }
 
 function getSignalReasons(article: NormalizedArticle): string[] {
   const text = `${article.title} ${article.summary}`.toLowerCase();
-  return PRIORITY_SIGNAL_KEYWORDS
+  const reasons = PRIORITY_SIGNAL_KEYWORDS
     .filter((signal) => text.includes(signal))
     .slice(0, 4)
     .map((signal) => `핵심 신호 포함: ${signal}`);
+
+  if (isStrategicCloudDistributionStory(article)) {
+    reasons.unshift("핵심 신호 포함: strategic cloud distribution");
+  }
+
+  return reasons;
 }
 
 function getMultiSourceValidationPriority(article: NormalizedArticle, articles: NormalizedArticle[]): number {
@@ -1075,11 +1138,11 @@ function selectArticlesForGeneration(
       return false;
     }
 
-    if (!options.relaxDistribution && article.type === "research" && typeCount >= 4) {
+    if (article.type === "research" && typeCount >= MAX_RESEARCH_SELECTION) {
       return false;
     }
 
-    if (clusterCount >= 2) {
+    if (clusterCount >= MAX_CLUSTER_SELECTION) {
       return false;
     }
 
