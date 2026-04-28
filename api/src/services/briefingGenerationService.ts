@@ -494,6 +494,33 @@ function isStrategicCloudDistributionStory(article: NormalizedArticle): boolean 
   return hasProviderSignal && hasRelationshipSignal && hasMajorAiVendorSignal;
 }
 
+function isMarketStructureShiftStory(article: NormalizedArticle): boolean {
+  const text = normalizeText(`${article.title} ${article.summary} ${article.content ?? ""}`);
+  const relationshipKeywords = [
+    "partnership",
+    "exclusive",
+    "non exclusive",
+    "nonexclusive",
+    "distribution",
+    "directly to customers",
+    "available on",
+    "available through",
+    "marketplace",
+    "hosted",
+    "deal",
+    "merger",
+    "acquisition",
+    "stake",
+    "legal peril",
+  ];
+  const majorVendorKeywords = ["openai", "anthropic", "google", "microsoft", "amazon", "meta", "nvidia"];
+  const effectiveCategory = getEffectiveCategory(article);
+  const hasRelationshipSignal = relationshipKeywords.some((keyword) => text.includes(normalizeText(keyword)));
+  const hasMajorVendorSignal = majorVendorKeywords.some((keyword) => text.includes(normalizeText(keyword)));
+
+  return hasRelationshipSignal && (hasMajorVendorSignal || effectiveCategory === "Investment" || effectiveCategory === "Infrastructure");
+}
+
 function getArticleAgeHours(article: NormalizedArticle): number | null {
   if (!article.publishedAt || !article.publishedAtKnown) {
     return null;
@@ -958,17 +985,17 @@ function seedClusterRepresentatives(scoredArticles: ArticleScoreBreakdown[]): Ar
 function getDynamicResearchSelectionLimit(scoredArticles: ArticleScoreBreakdown[]): number {
   const newsArticles = scoredArticles.filter((entry) => entry.article.type === "news");
   const strongNewsCount = newsArticles.filter((entry) => entry.totalScore >= 12).length;
-  const strategicCloudStoryCount = newsArticles.filter((entry) => isStrategicCloudDistributionStory(entry.article)).length;
+  const mustCoverNewsCount = newsArticles.filter((entry) => entry.editorialPriorityScore >= 4.2).length;
   const investmentOrInfrastructureCount = newsArticles.filter((entry) => {
     const category = getEffectiveCategory(entry.article);
     return category === "Investment" || category === "Infrastructure";
   }).length;
 
-  if (strongNewsCount >= 8 || strategicCloudStoryCount >= 1) {
+  if (strongNewsCount >= 8 || mustCoverNewsCount >= 2) {
     return 3;
   }
 
-  if (strongNewsCount >= 5 || investmentOrInfrastructureCount >= 4) {
+  if (strongNewsCount >= 5 || investmentOrInfrastructureCount >= 4 || mustCoverNewsCount >= 1) {
     return 4;
   }
 
@@ -994,8 +1021,12 @@ function getEditorialPriorityScore(
   const effectiveCategory = getEffectiveCategory(article);
   const corroborationScore = getMultiSourceValidationPriority(article, articles);
 
+  if (isMarketStructureShiftStory(article)) {
+    score += 1.5;
+  }
+
   if (isStrategicCloudDistributionStory(article)) {
-    score += 3.2;
+    score += 0.9;
   }
 
   if (effectiveCategory === "Investment" || effectiveCategory === "Infrastructure") {
@@ -1055,7 +1086,7 @@ function selectEditorialMustCoverCandidates(scoredArticles: ArticleScoreBreakdow
   const reserveCount = getAdaptiveEditorialReserveCount(scoredArticles);
   const prioritized = scoredArticles
     .filter((entry) => entry.article.type === "news")
-    .filter((entry) => entry.editorialPriorityScore >= 3.2)
+    .filter((entry) => entry.editorialPriorityScore >= 4.2)
     .sort((left, right) => {
       if (right.editorialPriorityScore !== left.editorialPriorityScore) {
         return right.editorialPriorityScore - left.editorialPriorityScore;
