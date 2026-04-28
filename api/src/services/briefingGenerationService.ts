@@ -758,6 +758,7 @@ interface ArticleScoreBreakdown {
   impactScore: number;
   freshnessScore: number;
   totalScore: number;
+  editorialPriorityScore: number;
   cluster: string;
   reasons: string[];
 }
@@ -907,6 +908,7 @@ function scoreArticleBreakdown(
     + getGitHubTrendingSignalPriority(article, trendingSignals);
   const freshnessScore = getRecencyPriority(article);
   const totalScore = impactScore + freshnessScore - overlapPenalty;
+  const editorialPriorityScore = getEditorialPriorityScore(article, impactScore, freshnessScore, totalScore, articles);
   const reasons = [
     getRecencyReason(article),
     getSourceReason(article),
@@ -915,11 +917,16 @@ function scoreArticleBreakdown(
     ...getSignalReasons(article),
   ].filter((reason): reason is string => Boolean(reason));
 
+  if (editorialPriorityScore >= 3.2) {
+    reasons.unshift("편집 우선 판단: 오늘 놓치면 안 되는 핵심 뉴스");
+  }
+
   return {
     article,
     impactScore,
     freshnessScore,
     totalScore,
+    editorialPriorityScore,
     cluster: detectTopicCluster(article),
     reasons: [...new Set(reasons)].slice(0, 5),
   };
@@ -970,6 +977,114 @@ function getDynamicResearchSelectionLimit(scoredArticles: ArticleScoreBreakdown[
   }
 
   return 5;
+}
+
+function getEditorialPriorityScore(
+  article: NormalizedArticle,
+  impactScore: number,
+  freshnessScore: number,
+  totalScore: number,
+  articles: NormalizedArticle[],
+): number {
+  if (article.type !== "news") {
+    return 0;
+  }
+
+  let score = 0;
+  const effectiveCategory = getEffectiveCategory(article);
+  const corroborationScore = getMultiSourceValidationPriority(article, articles);
+
+  if (isStrategicCloudDistributionStory(article)) {
+    score += 3.2;
+  }
+
+  if (effectiveCategory === "Investment" || effectiveCategory === "Infrastructure") {
+    score += 1.1;
+  } else if (effectiveCategory === "Product" || effectiveCategory === "Model") {
+    score += 0.7;
+  }
+
+  if (impactScore >= 10.5) {
+    score += 1;
+  } else if (impactScore >= 9.5) {
+    score += 0.5;
+  }
+
+  if (freshnessScore >= 3) {
+    score += 0.8;
+  } else if (freshnessScore >= 1.5) {
+    score += 0.3;
+  }
+
+  if (totalScore >= 13) {
+    score += 0.8;
+  } else if (totalScore >= 12) {
+    score += 0.4;
+  }
+
+  if (corroborationScore >= 0.9) {
+    score += 1;
+  } else if (corroborationScore >= 0.45) {
+    score += 0.5;
+  }
+
+  if (getSourcePriority(article) >= 3.35) {
+    score += 0.4;
+  }
+
+  return score;
+}
+
+function getAdaptiveEditorialReserveCount(scoredArticles: ArticleScoreBreakdown[]): number {
+  const strongNewsCount = scoredArticles.filter((entry) =>
+    entry.article.type === "news" && entry.totalScore >= 12
+  ).length;
+
+  if (strongNewsCount >= 8) {
+    return 3;
+  }
+
+  if (strongNewsCount >= 5) {
+    return 2;
+  }
+
+  return 1;
+}
+
+function selectEditorialMustCoverCandidates(scoredArticles: ArticleScoreBreakdown[]): ArticleScoreBreakdown[] {
+  const reserveCount = getAdaptiveEditorialReserveCount(scoredArticles);
+  const prioritized = scoredArticles
+    .filter((entry) => entry.article.type === "news")
+    .filter((entry) => entry.editorialPriorityScore >= 3.2)
+    .sort((left, right) => {
+      if (right.editorialPriorityScore !== left.editorialPriorityScore) {
+        return right.editorialPriorityScore - left.editorialPriorityScore;
+      }
+
+      if (right.totalScore !== left.totalScore) {
+        return right.totalScore - left.totalScore;
+      }
+
+      return right.freshnessScore - left.freshnessScore;
+    });
+
+  const chosen: ArticleScoreBreakdown[] = [];
+  const seenClusters = new Set<string>();
+
+  for (const entry of prioritized) {
+    if (chosen.length >= reserveCount) {
+      break;
+    }
+
+    if (seenClusters.has(entry.cluster)) {
+      continue;
+    }
+
+    seenClusters.add(entry.cluster);
+    chosen.push(entry);
+  }
+
+  return chosen;
 }
 
 function getImportanceSeedScore(importance: Briefing["issues"][number]["importance"]): number {
@@ -1133,6 +1248,7 @@ function selectArticlesForGeneration(
   const maxResearchSelection = getDynamicResearchSelectionLimit(scoredSelectionPool);
   const rankedArticles = scoredSelectionPool.map((entry) => withEffectiveCategory(entry.article));
   const clusterRepresentatives = seedClusterRepresentatives(scoredSelectionPool);
+  const editorialMustCoverCandidates = selectEditorialMustCoverCandidates(scoredSelectionPool);
 
   const selected: NormalizedArticle[] = [];
   const sourceCounts = new Map<string, number>();
@@ -1190,6 +1306,14 @@ function selectArticlesForGeneration(
     layerCounts.set(article.layer, layerCount + 1);
     return true;
   };
+
+  for (const candidate of editorialMustCoverCandidates) {
+    if (selected.length >= MAX_GENERATION_ARTICLES) {
+      break;
+    }
+
+    addArticle(withEffectiveCategory(candidate.article));
+  }
 
   for (const slot of SELECTION_SLOT_DEFINITIONS) {
     if (selected.length >= MAX_GENERATION_ARTICLES) {
