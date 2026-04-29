@@ -96,6 +96,34 @@ const STORY_DUPLICATE_STOPWORDS = new Set([
   "gpt", "chatgpt", "gemini", "llm", "llms", "more", "next", "only", "why", "how", "use", "uses",
   "like", "into", "through", "after", "before", "over", "under", "must", "never",
 ]);
+const STORY_ENTITY_SIGNAL_KEYWORDS: Record<string, string[]> = {
+  openai: ["openai", "오픈ai", "chatgpt", "gpt"],
+  microsoft: ["microsoft", "마이크로소프트", "ms"],
+  aws: ["aws", "amazon web services", "아마존 웹 서비스", "아마존"],
+  google: ["google", "구글", "gemini", "deepmind"],
+  anthropic: ["anthropic", "앤트로픽", "claude"],
+  nvidia: ["nvidia", "엔비디아"],
+  amazon: ["amazon", "아마존"],
+  skt: ["skt", "sk telecom", "sk 텔레콤"],
+} as const;
+const STORY_EVENT_SIGNAL_KEYWORDS: Record<string, string[]> = {
+  market_structure: [
+    "exclusive", "non exclusive", "nonexclusive", "partnership", "distribution", "marketplace",
+    "cloud provider", "third party cloud", "available on aws", "available through", "hosted",
+    "revenue share", "revenue sharing", "multicloud", "multi cloud", "legal peril", "ipo",
+    "독점", "멀티클라우드", "수익 배분", "클라우드", "재조정", "재편",
+  ],
+  investment: [
+    "funding", "investment", "deal", "merger", "stake", "acquisition", "acquired", "buy",
+    "option to buy", "raises", "ipo", "투자", "인수", "지분",
+  ],
+  launch: [
+    "launch", "launched", "release", "released", "introducing", "available", "rollout",
+    "출시", "공개", "도입",
+  ],
+  award: ["award", "awarded", "winner", "수상"],
+  defense: ["pentagon", "defense", "weapon", "surveillance", "국방", "감시", "무기"],
+} as const;
 const SELECTION_SLOT_DEFINITIONS = [
   {
     id: "domestic-trend",
@@ -669,6 +697,10 @@ function getMultiSourceValidationReason(article: NormalizedArticle, articles: No
 }
 
 function detectTopicCluster(article: NormalizedArticle): string {
+  if (isMarketStructureShiftStory(article)) {
+    return "market-structure-shift";
+  }
+
   const text = normalizeText(`${article.title} ${article.summary} ${article.source}`);
   for (const [cluster, keywords] of Object.entries(TOPIC_CLUSTER_KEYWORDS)) {
     if (keywords.some((keyword) => text.includes(normalizeText(keyword)))) {
@@ -714,6 +746,20 @@ function getSharedTokenCount(left: string[], right: string[]): number {
   return left.filter((token) => rightSet.has(token)).length;
 }
 
+function getStoryEntitySignals(article: Pick<NormalizedArticle, "title" | "summary" | "content" | "source">): string[] {
+  const text = normalizeText(`${article.title} ${article.summary} ${article.content ?? ""} ${article.source}`);
+  return Object.entries(STORY_ENTITY_SIGNAL_KEYWORDS)
+    .filter(([, keywords]) => keywords.some((keyword) => text.includes(normalizeText(keyword))))
+    .map(([entity]) => entity);
+}
+
+function getStoryEventSignals(article: Pick<NormalizedArticle, "title" | "summary" | "content">): string[] {
+  const text = normalizeText(`${article.title} ${article.summary} ${article.content ?? ""}`);
+  return Object.entries(STORY_EVENT_SIGNAL_KEYWORDS)
+    .filter(([, keywords]) => keywords.some((keyword) => text.includes(normalizeText(keyword))))
+    .map(([event]) => event);
+}
+
 function getPublishedAtTimestamp(article: NormalizedArticle): number | null {
   if (!article.publishedAtKnown || !article.publishedAt) {
     return null;
@@ -741,6 +787,12 @@ function areLikelySameStory(left: NormalizedArticle, right: NormalizedArticle): 
   const leftContentTokens = getStoryTokens(getStoryText(left));
   const rightContentTokens = getStoryTokens(getStoryText(right));
   const sharedContentTokenCount = getSharedTokenCount(leftContentTokens, rightContentTokens);
+  const leftEntitySignals = getStoryEntitySignals(left);
+  const rightEntitySignals = getStoryEntitySignals(right);
+  const sharedEntitySignalCount = getSharedTokenCount(leftEntitySignals, rightEntitySignals);
+  const leftEventSignals = getStoryEventSignals(left);
+  const rightEventSignals = getStoryEventSignals(right);
+  const sharedEventSignalCount = getSharedTokenCount(leftEventSignals, rightEventSignals);
 
   const leftPublishedAt = getPublishedAtTimestamp(left);
   const rightPublishedAt = getPublishedAtTimestamp(right);
@@ -762,6 +814,20 @@ function areLikelySameStory(left: NormalizedArticle, right: NormalizedArticle): 
   }
 
   if (sameCluster && sharedTitleTokenCount >= 1 && sharedContentTokenCount >= 1 && publishedGapHours !== null && publishedGapHours <= 24) {
+    return true;
+  }
+
+  if (sharedEntitySignalCount >= 2 && sharedEventSignalCount >= 1 && (publishedGapHours === null || publishedGapHours <= 96)) {
+    return true;
+  }
+
+  if (
+    isMarketStructureShiftStory(left)
+    && isMarketStructureShiftStory(right)
+    && sharedEntitySignalCount >= 1
+    && sharedEventSignalCount >= 1
+    && (publishedGapHours === null || publishedGapHours <= 96)
+  ) {
     return true;
   }
 
