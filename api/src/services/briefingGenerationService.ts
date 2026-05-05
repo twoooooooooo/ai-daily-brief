@@ -1238,6 +1238,36 @@ function getIssueRecencyUrgencyScore(issue: Pick<Briefing["issues"][number], "so
   return -0.6;
 }
 
+function getEditorialDisplayUrgencyScore(scoreBreakdown?: ArticleScoreBreakdown): number {
+  if (!scoreBreakdown) {
+    return 0;
+  }
+
+  let score = 0;
+
+  if (scoreBreakdown.editorialPriorityScore >= 3.2) {
+    score += 1.25;
+  } else if (scoreBreakdown.editorialPriorityScore >= 2.4) {
+    score += 0.7;
+  }
+
+  if (scoreBreakdown.cluster === "market-structure-shift") {
+    score += 1.35;
+  }
+
+  if (scoreBreakdown.cluster === "funding") {
+    score += 0.55;
+  }
+
+  if (scoreBreakdown.impactScore >= 11.5) {
+    score += 0.6;
+  } else if (scoreBreakdown.impactScore >= 10.5) {
+    score += 0.3;
+  }
+
+  return score;
+}
+
 function normalizeIssueImportance(
   issue: Pick<Briefing["issues"][number], "importance" | "category" | "sourcePublishedAt" | "type">,
   scoreBreakdown?: ArticleScoreBreakdown,
@@ -1245,7 +1275,8 @@ function normalizeIssueImportance(
   const score = (scoreBreakdown?.totalScore ?? 0)
     + getImportanceSeedScore(issue.importance)
     + getCategoryUrgencyScore(issue.category)
-    + getIssueRecencyUrgencyScore(issue);
+    + getIssueRecencyUrgencyScore(issue)
+    + getEditorialDisplayUrgencyScore(scoreBreakdown);
 
   if (score >= 15.5) {
     return {
